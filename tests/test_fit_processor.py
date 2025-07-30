@@ -18,67 +18,85 @@ class TestFitProcessor:
 
     def test_init(self):
         """Test FitProcessor initialization."""
-        assert self.processor.supported_messages == [
-            "record",
-            "session",
-            "lap",
-            "device_info",
-            "file_id",
-        ]
+        # Since we removed supported_messages, just test that the processor initializes
+        assert isinstance(self.processor, FitProcessor)
 
-    @patch("src.fit_processor.FitFile")
-    def test_process_fit_file_success(self, mock_fitfile):
+    @patch("src.fit_processor.Stream")
+    @patch("src.fit_processor.Decoder")
+    def test_process_fit_file_success(self, mock_decoder, mock_stream):
         """Test successful FIT file processing."""
-        # Mock FitFile and messages
-        mock_message = Mock()
-        mock_message.name = "record"
+        # Mock the Garmin SDK components
+        mock_stream_instance = Mock()
+        mock_stream.from_file.return_value = mock_stream_instance
 
-        mock_field1 = Mock()
-        mock_field1.name = "heart_rate"
-        mock_field1.value = 150
+        mock_decoder_instance = Mock()
+        mock_decoder.return_value = mock_decoder_instance
 
-        mock_field2 = Mock()
-        mock_field2.name = "speed"
-        mock_field2.value = 5.5
-
-        mock_message.fields = [mock_field1, mock_field2]
-
-        mock_fitfile_instance = Mock()
-        mock_fitfile_instance.get_messages.return_value = [mock_message]
-        mock_fitfile.return_value = mock_fitfile_instance
+        # Mock the messages returned by decoder.read()
+        mock_messages = {
+            "record_mesgs": [
+                {"heart_rate": 150, "speed": 5.5, "timestamp": "2023-01-01T12:00:00Z"},
+                {"heart_rate": 155, "speed": 6.0, "timestamp": "2023-01-01T12:00:01Z"},
+            ],
+            "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 152}],
+        }
+        mock_decoder_instance.read.return_value = (mock_messages, [])
 
         # Test processing
         result = self.processor.process_fit_file("test.fit")
 
+        # Verify results
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 3  # 2 record messages + 1 session message
+
+        # Check record messages
+        record_rows = result[result["message_type"] == "record"]
+        assert len(record_rows) == 2
+        assert record_rows.iloc[0]["heart_rate"] == 150
+        assert record_rows.iloc[0]["speed"] == 5.5
+        assert record_rows.iloc[1]["heart_rate"] == 155
+        assert record_rows.iloc[1]["speed"] == 6.0
+
+        # Check session message
+        session_rows = result[result["message_type"] == "session"]
+        assert len(session_rows) == 1
+        assert session_rows.iloc[0]["total_distance"] == 1000
+        assert session_rows.iloc[0]["avg_heart_rate"] == 152
+
+    @patch("src.fit_processor.Stream")
+    @patch("src.fit_processor.Decoder")
+    def test_process_fit_file_no_data(self, mock_decoder, mock_stream):
+        """Test FIT file with no data."""
+        mock_stream_instance = Mock()
+        mock_stream.from_file.return_value = mock_stream_instance
+
+        mock_decoder_instance = Mock()
+        mock_decoder.return_value = mock_decoder_instance
+        mock_decoder_instance.read.return_value = ({}, [])  # Empty messages
+
+        with pytest.raises(ValueError, match="No data found"):
+            self.processor.process_fit_file("test.fit")
+
+    @patch("src.fit_processor.Stream")
+    @patch("src.fit_processor.Decoder")
+    def test_process_fit_file_unsupported_messages(self, mock_decoder, mock_stream):
+        """Test FIT file processing - this test is now obsolete since we process all messages."""
+        # Since we now process all messages, this test should pass with any valid data
+        mock_stream_instance = Mock()
+        mock_stream.from_file.return_value = mock_stream_instance
+
+        mock_decoder_instance = Mock()
+        mock_decoder.return_value = mock_decoder_instance
+
+        # Mock some messages (any messages should work now)
+        mock_messages = {"custom_mesgs": [{"custom_field": "custom_value"}]}
+        mock_decoder_instance.read.return_value = (mock_messages, [])
+
+        result = self.processor.process_fit_file("test.fit")
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
-        assert result.iloc[0]["message_type"] == "record"
-        assert result.iloc[0]["heart_rate"] == 150
-        assert result.iloc[0]["speed"] == 5.5
-
-    @patch("src.fit_processor.FitFile")
-    def test_process_fit_file_no_data(self, mock_fitfile):
-        """Test FIT file with no supported messages."""
-        mock_fitfile_instance = Mock()
-        mock_fitfile_instance.get_messages.return_value = []
-        mock_fitfile.return_value = mock_fitfile_instance
-
-        with pytest.raises(ValueError, match="No supported data found"):
-            self.processor.process_fit_file("test.fit")
-
-    @patch("src.fit_processor.FitFile")
-    def test_process_fit_file_unsupported_messages(self, mock_fitfile):
-        """Test FIT file with only unsupported message types."""
-        mock_message = Mock()
-        mock_message.name = "unsupported_message"
-        mock_message.fields = []
-
-        mock_fitfile_instance = Mock()
-        mock_fitfile_instance.get_messages.return_value = [mock_message]
-        mock_fitfile.return_value = mock_fitfile_instance
-
-        with pytest.raises(ValueError, match="No supported data found"):
-            self.processor.process_fit_file("test.fit")
+        assert result.iloc[0]["message_type"] == "custom"
+        assert result.iloc[0]["custom_field"] == "custom_value"
 
     def test_extract_summary_stats_empty_df(self):
         """Test summary stats extraction with empty DataFrame."""

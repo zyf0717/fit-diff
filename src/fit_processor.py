@@ -2,18 +2,18 @@
 FIT file processor module.
 """
 
-from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pandas as pd
-from fitparse import FitFile
+from garmin_fit_sdk import Decoder, Stream
 
 
 class FitProcessor:
     """Processes FIT files and extracts data into pandas DataFrames."""
 
     def __init__(self):
-        self.supported_messages = ["record", "session", "lap", "device_info", "file_id"]
+        # No longer using supported messages - process all message types
+        pass
 
     def process_fit_file(self, file_path: str) -> pd.DataFrame:
         """
@@ -25,22 +25,27 @@ class FitProcessor:
         Returns:
             DataFrame with processed FIT data
         """
-        fitfile = FitFile(file_path)
+        # Parse FIT file using Garmin SDK
+        stream = Stream.from_file(file_path)
+        decoder = Decoder(stream)
+        messages, errors = decoder.read()
 
         records = []
 
-        for message in fitfile.get_messages():
-            if message.name in self.supported_messages:
-                record = {"message_type": message.name}
+        # Process all message types from the Garmin SDK
+        for message_type, message_list in messages.items():
+            for message in message_list:
+                record = {"message_type": message_type.replace("_mesgs", "")}
 
-                for field in message.fields:
-                    if field.value is not None:
-                        record[field.name] = field.value
+                # Add all fields from the message
+                for field_name, field_value in message.items():
+                    if field_value is not None:
+                        record[field_name] = field_value
 
                 records.append(record)
 
         if not records:
-            raise ValueError("No supported data found in FIT file")
+            raise ValueError("No data found in FIT file")
 
         df = pd.DataFrame(records)
 
@@ -76,5 +81,4 @@ class FitProcessor:
                     stats[f"{col}_max"] = values.max()
                     stats[f"{col}_min"] = values.min()
 
-        return stats
         return stats

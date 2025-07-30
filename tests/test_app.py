@@ -4,8 +4,6 @@ Integration tests for the Shiny app.
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from app import app_ui, server
 
 

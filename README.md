@@ -25,12 +25,6 @@ conda env create -f environment.yml
 conda activate fit-diff
 ```
 
-### Manual Installation
-
-```bash
-pip install shiny pandas fitparse numpy
-```
-
 ## Usage
 
 Run the application:
@@ -41,22 +35,6 @@ python app.py
 
 Then open your browser to the displayed URL (typically <http://localhost:8000>).
 
-## Project Structure
-
-```
-fit-diff/
-├── app.py                 # Main Shiny application
-├── src/
-│   ├── fit_processor.py   # FIT file processing logic
-│   └── diff_analyzer.py   # Comparison and diff analysis
-├── tests/
-│   ├── test_fit_processor.py
-│   ├── test_diff_analyzer.py
-│   └── fixtures/          # Test FIT files
-├── environment.yml        # Conda environment definition
-└── README.md
-```
-
 ## Testing
 
 Run tests with pytest:
@@ -65,18 +43,9 @@ Run tests with pytest:
 pytest tests/
 ```
 
-## Supported FIT Message Types
-
-- record (GPS/sensor data points)
-- session (workout summaries)
-- lap (lap/interval data)
-- device_info (device information)
-- file_id (file metadata)
-
 ## Contributing
 
 This is a lean implementation. To extend functionality:
 
-1. Add new message types in `FitProcessor.supported_messages`
-2. Extend comparison logic in `DiffAnalyzer`
-3. Add new UI components in `app.py`
+1. Extend comparison logic in `DiffAnalyzer`
+2. Add new UI components in `app.py`
