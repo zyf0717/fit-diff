@@ -4,7 +4,8 @@ Integration tests for the Shiny app.
 
 from unittest.mock import Mock, patch
 
-from src.app import app_ui, server
+from src.app_server import server
+from src.app_ui import app_ui
 
 
 class TestApp:
@@ -15,8 +16,8 @@ class TestApp:
         assert app_ui is not None
         # More detailed UI testing would require Shiny's test utilities
 
-    @patch("app.FitProcessor")
-    @patch("app.DiffAnalyzer")
+    @patch("src.fit_processor.FitProcessor")
+    @patch("src.diff_analyzer.DiffAnalyzer")
     def test_server_initialization(self, mock_diff_analyzer, mock_fit_processor):
         """Test that server function can be called without errors."""
         # Mock inputs, outputs, session
