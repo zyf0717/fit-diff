@@ -25,10 +25,5 @@ class TestApp:
         mock_output = Mock()
         mock_session = Mock()
 
-        # This should not raise an exception
-        server_func = server(mock_input, mock_output, mock_session)
-
         # The server function returns None but sets up reactive handlers
-        assert server_func is None
-        # The server function returns None but sets up reactive handlers
-        assert server_func is None
+        assert server(mock_input, mock_output, mock_session) is None

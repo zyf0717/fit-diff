@@ -4,8 +4,8 @@ import pandas as pd
 from shiny import Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
 
-from .diff_analyzer import DiffAnalyzer
-from .fit_processor import FitProcessor
+from src.diff_analyzer import DiffAnalyzer
+from src.fit_processor import FitProcessor
 
 
 def server(input: Inputs, output: Outputs, session: Session):
