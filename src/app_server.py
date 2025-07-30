@@ -4,12 +4,23 @@ import pandas as pd
 from shiny import Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
 
-from src.diff_analyzer import DiffAnalyzer
-from src.fit_processor import FitProcessor
+from src.utils import process_fit
 
 
 def server(input: Inputs, output: Outputs, session: Session):
     fit_data = reactive.Value({})
+
+    @render.ui
+    def file_selector():
+        files = list(fit_data().keys())
+        if not files:
+            return ui.p("No files uploaded yet.")
+        return ui.input_select(
+            "selected_file",
+            "Select file to display:",
+            choices=files,
+            selected=files[0] if files else None,
+        )
 
     @reactive.Effect
     @reactive.event(input.file_upload)
@@ -17,44 +28,42 @@ def server(input: Inputs, output: Outputs, session: Session):
         files: List[FileInfo] = input.file_upload()
         if not files:
             return
-        processor = FitProcessor()
-        data = {}
+        current = fit_data().copy()
         for file_info in files:
             try:
                 uploaded_file_path = file_info["datapath"]
-                fit_df = processor.process_fit_file(uploaded_file_path)
-                data[file_info["name"]] = fit_df
+                fit_df = process_fit(uploaded_file_path)
+                current[file_info["name"]] = fit_df
             except Exception as e:
-                data[file_info["name"]] = f"Error: {str(e)}"
-        fit_data.set(data)
+                current[file_info["name"]] = f"Error: {str(e)}"
+        fit_data.set(current)
 
-    @output
-    @render.ui
-    def file_summary():
-        data = fit_data.get()
-        if not data:
-            return ui.p("No files uploaded yet.")
-        summaries = []
-        for filename, df in data.items():
-            if isinstance(df, str):
-                summaries.append(ui.div(ui.h4(filename), ui.p(df, style="color: red;")))
-            else:
-                summaries.append(ui.div(ui.h4(filename), ui.p(f"Records: {len(df)}")))
-        return ui.div(*summaries)
-
-    @output
     @render.data_frame
-    def diff_table():
-        data = fit_data.get()
-        if len(data) < 2:
-            return pd.DataFrame(
-                {"Message": ["Upload at least 2 FIT files to see differences"]}
-            )
-        valid_data = {k: v for k, v in data.items() if isinstance(v, pd.DataFrame)}
-        if len(valid_data) < 2:
-            return pd.DataFrame({"Message": ["At least 2 valid FIT files required"]})
-        analyzer = DiffAnalyzer()
-        diff_df = analyzer.compare_files(
-            list(valid_data.values()), list(valid_data.keys())
-        )
-        return diff_df
+    def render_fit_session_dataframe():
+        selected = input.selected_file()
+        if not selected:
+            return pd.DataFrame()
+        df = fit_data().get(selected)[0]
+        if df is None:
+            return pd.DataFrame()
+        if isinstance(df, str):
+            return pd.DataFrame({"error": [df]})
+        if not df.empty:
+            df = df.copy()
+            return df
+        return pd.DataFrame()
+
+    @render.data_frame
+    def render_fit_records_dataframe():
+        selected = input.selected_file()
+        if not selected:
+            return pd.DataFrame()
+        df = fit_data().get(selected)[1]
+        if df is None:
+            return pd.DataFrame()
+        if isinstance(df, str):
+            return pd.DataFrame({"error": [df]})
+        if not df.empty:
+            df = df.copy()
+            return df
+        return pd.DataFrame()
