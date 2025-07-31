@@ -43,31 +43,27 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     return session_df, record_df
 
 
-def create_heart_rate_plot(fit_data_dict: dict) -> Union[go.Figure, None]:
-    """
-    Create a heart rate plot from fit data dictionary.
-
-    Args:
-        fit_data_dict: Dictionary where keys are filenames and values are
-                      tuples of (session_df, records_df) or error strings
-
-    Returns:
-        Plotly figure or None if no valid data found
-    """
+def create_combined_df(
+    fit_data_dict: dict, metrics: Union[str, list]
+) -> Union[pd.DataFrame, None]:
+    """Create combined DataFrame from fit data for specified metrics."""
     if not fit_data_dict:
         return None
+
+    metrics = [metrics] if isinstance(metrics, str) else metrics
+    required_cols = ["timestamp"] + metrics
 
     relevant_dfs = []
     for k, v in fit_data_dict.items():
         if not isinstance(v, (list, tuple)) or len(v) < 2:
             continue
-        df = v[1]
+        df = v[1]  # records DataFrame
         if isinstance(df, str) or not isinstance(df, pd.DataFrame) or df.empty:
             continue
-        cols = [col for col in ["timestamp", "heart_rate"] if col in df.columns]
-        if len(cols) < 2:
+        available_cols = [col for col in required_cols if col in df.columns]
+        if len(available_cols) < 2:  # At least timestamp + 1 metric
             continue
-        sub_df = df[cols].copy()
+        sub_df = df[available_cols].copy()
         sub_df["file"] = k
         relevant_dfs.append(sub_df)
 
@@ -75,10 +71,107 @@ def create_heart_rate_plot(fit_data_dict: dict) -> Union[go.Figure, None]:
         return None
 
     combined_df = pd.concat(relevant_dfs, ignore_index=True)
-    if combined_df.empty:
+    return combined_df if not combined_df.empty else None
+
+
+def create_metric_plot(
+    combined_df: pd.DataFrame, metrics: Union[str, list]
+) -> Union[go.Figure, None]:
+    """Create line plot from combined DataFrame for specified metrics."""
+    if combined_df is None or combined_df.empty:
         return None
 
-    return px.line(combined_df, x="timestamp", y="heart_rate", color="file")
+    metrics = [metrics] if isinstance(metrics, str) else metrics
+
+    if len(metrics) == 1:
+        return px.line(combined_df, x="timestamp", y=metrics[0], color="file")
+
+    # Multiple metrics: melt for faceted plot
+    melted_df = combined_df.melt(
+        id_vars=["timestamp", "file"],
+        value_vars=metrics,
+        var_name="metric",
+        value_name="value",
+    )
+    return px.line(
+        melted_df, x="timestamp", y="value", color="file", facet_col="metric"
+    )
+
+
+def calculate_basic_stats(
+    combined_df: pd.DataFrame, metrics: Union[str, list]
+) -> Union[pd.DataFrame, None]:
+    """Calculate basic statistics for each file and metric."""
+    if combined_df is None or combined_df.empty:
+        return None
+
+    metrics = [metrics] if isinstance(metrics, str) else metrics
+    available_metrics = [m for m in metrics if m in combined_df.columns]
+
+    if not available_metrics:
+        return None
+
+    stats_list = []
+    for metric in available_metrics:
+        metric_stats = (
+            combined_df.groupby("file")[metric]
+            .agg(["count", "mean", "std", "min", "max", "median"])
+            .round(2)
+            .reset_index()
+        )
+        metric_stats["metric"] = metric
+        stats_list.append(metric_stats)
+
+    return pd.concat(stats_list, ignore_index=True)
+
+
+def calculate_diff_stats(
+    combined_df: pd.DataFrame, metrics: Union[str, list]
+) -> Union[pd.DataFrame, None]:
+    """Calculate pairwise comparison statistics between files for each metric."""
+    if combined_df is None or combined_df.empty:
+        return None
+
+    files = combined_df["file"].unique()
+    if len(files) < 2:
+        return None
+
+    metrics = [metrics] if isinstance(metrics, str) else metrics
+    available_metrics = [m for m in metrics if m in combined_df.columns]
+
+    if not available_metrics:
+        return None
+
+    all_stats = []
+    for metric in available_metrics:
+        pivot_df = combined_df.pivot_table(
+            index="timestamp", columns="file", values=metric, aggfunc="first"
+        ).dropna()
+
+        if pivot_df.empty:
+            continue
+
+        for i, file1 in enumerate(files):
+            for file2 in files[i + 1 :]:
+                if file1 in pivot_df.columns and file2 in pivot_df.columns:
+                    y1, y2 = pivot_df[file1], pivot_df[file2]
+                    mae = (y1 - y2).abs().mean()
+                    mse = ((y1 - y2) ** 2).mean()
+
+                    all_stats.append(
+                        {
+                            "metric": metric,
+                            "file1": file1,
+                            "file2": file2,
+                            "mae": round(mae, 2),
+                            "mse": round(mse, 2),
+                            "rmse": round(mse**0.5, 2),
+                            "correlation": round(y1.corr(y2), 3),
+                            "points": len(y1),
+                        }
+                    )
+
+    return pd.DataFrame(all_stats) if all_stats else None
 
 
 # def plot_continuous_line(

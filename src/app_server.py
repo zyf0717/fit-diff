@@ -6,7 +6,13 @@ from shiny import Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
 from shinywidgets import render_widget
 
-from src.utils import create_heart_rate_plot, process_fit
+from src.utils import (
+    calculate_basic_stats,
+    calculate_diff_stats,
+    create_combined_df,
+    create_metric_plot,
+    process_fit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,13 +21,25 @@ def server(input: Inputs, output: Outputs, session: Session):
     fit_data = reactive.Value({})
 
     @render.ui
+    def comparisonMetricSelector():
+        choices = _get_common_metrics()
+        if not choices:
+            return None
+        return ui.input_select(
+            "comparison_metric",
+            "Select comparison metric:",
+            choices=choices,
+            selected="heart_rate",
+        )
+
+    @render.ui
     def fileSelector():
         files = list(fit_data().keys())
         if not files:
-            return ui.p("No files uploaded yet.")
+            return None
         return ui.input_select(
             "selected_file",
-            "Select file to display:",
+            "Select file:",
             choices=files,
             selected=files[0] if files else None,
         )
@@ -43,9 +61,61 @@ def server(input: Inputs, output: Outputs, session: Session):
                 current[file_info["name"]] = f"Error: {str(e)}"
         fit_data.set(current)
 
+    @reactive.Calc
+    def _get_common_metrics():
+        data_dict = fit_data()
+        if not data_dict:
+            return []
+
+        valid_dfs = []
+        for v in data_dict.values():
+            if isinstance(v, (list, tuple)) and len(v) >= 2:
+                df = v[1]  # records DataFrame
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    valid_dfs.append(df)
+
+        if not valid_dfs:
+            return []
+
+        # Get intersection of all column sets
+        common_cols = set(valid_dfs[0].columns)
+        for df in valid_dfs[1:]:
+            common_cols &= set(df.columns)
+
+        # Exclude timestamp columns
+        common_cols = {col for col in common_cols if "timestamp" not in col.lower()}
+
+        return sorted(list(common_cols))
+
+    @reactive.Calc
+    def _get_combined_df():
+        metric = (
+            input.comparison_metric()
+            if hasattr(input, "comparison_metric")
+            else "heart_rate"
+        )
+        return create_combined_df(fit_data(), metric)
+
     @render_widget
     def outputPlot():
-        return create_heart_rate_plot(fit_data())
+        combined_df = _get_combined_df()
+        if combined_df is None or combined_df.empty:
+            return None
+        return create_metric_plot(combined_df, input.comparison_metric())
+
+    @render.data_frame
+    def basicStatsTable():
+        combined_df = _get_combined_df()
+        if combined_df is None:
+            return pd.DataFrame()
+        return calculate_basic_stats(combined_df, input.comparison_metric())
+
+    @render.data_frame
+    def diffStatsTable():
+        combined_df = _get_combined_df()
+        if combined_df is None:
+            return pd.DataFrame()
+        return calculate_diff_stats(combined_df, input.comparison_metric())
 
     def _render_fit_dataframe(index: int):
         selected = input.selected_file()

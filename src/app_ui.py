@@ -8,9 +8,22 @@ app_ui = ui.page_fluid(
                 "file_upload", "Upload FIT files", multiple=True, accept=[".fit"]
             ),
         ),
-        output_widget("outputPlot"),
-        ui.output_ui("fileSelector"),
-        ui.output_data_frame("renderFitSessionDataFrame"),
-        ui.output_data_frame("renderFitRecordsDataFrame"),
+        ui.output_ui("comparisonMetricSelector"),
+        ui.card(
+            output_widget("outputPlot"),
+        ),
+        ui.card(
+            ui.card_header("File Statistics"), ui.output_data_frame("basicStatsTable")
+        ),
+        ui.card(
+            ui.card_header("Comparison Statistics"),
+            ui.output_data_frame("diffStatsTable"),
+        ),
+        ui.card(
+            ui.card_header("Data Tables"),
+            ui.output_ui("fileSelector"),
+            ui.output_data_frame("renderFitSessionDataFrame"),
+            ui.output_data_frame("renderFitRecordsDataFrame"),
+        ),
     )
 )
