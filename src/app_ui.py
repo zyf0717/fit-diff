@@ -1,4 +1,5 @@
 from shiny import ui
+from shinywidgets import output_widget
 
 app_ui = ui.page_fluid(
     ui.layout_sidebar(
@@ -7,8 +8,9 @@ app_ui = ui.page_fluid(
                 "file_upload", "Upload FIT files", multiple=True, accept=[".fit"]
             ),
         ),
-        ui.output_ui("file_selector"),
-        ui.output_data_frame("render_fit_session_dataframe"),
-        ui.output_data_frame("render_fit_records_dataframe"),
+        output_widget("outputPlot"),
+        ui.output_ui("fileSelector"),
+        ui.output_data_frame("renderFitSessionDataFrame"),
+        ui.output_data_frame("renderFitRecordsDataFrame"),
     )
 )
