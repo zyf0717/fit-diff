@@ -21,6 +21,25 @@ from src.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _build_device_key(meta: dict, session_df: pd.DataFrame) -> str:
+    """Create a readable key based on device metadata."""
+    manufacturer = meta.get("manufacturer", "unknown")
+    product = (
+        meta.get("product_name") or meta.get("serial_number") or meta.get("product")
+    )
+    start_time = None
+    if not session_df.empty and "start_time" in session_df.columns:
+        start_time = session_df.iloc[0]["start_time"]
+    elif meta.get("time_created"):
+        start_time = meta.get("time_created")
+    key_parts = [str(manufacturer).strip()]
+    if product:
+        key_parts.append(str(product).strip())
+    if start_time is not None:
+        key_parts.append(str(start_time))
+    return "_".join(key_parts)
+
+
 def server(input: Inputs, output: Outputs, session: Session):
     fit_data = reactive.Value({})
 
@@ -85,8 +104,15 @@ def server(input: Inputs, output: Outputs, session: Session):
         for file_info in files:
             try:
                 uploaded_file_path = file_info["datapath"]
-                fit_df = process_fit(uploaded_file_path)
-                current[file_info["name"]] = fit_df
+                session_df, record_df, meta = process_fit(uploaded_file_path)
+                key = _build_device_key(meta, session_df)
+                # ensure uniqueness by appending count if needed
+                suffix = 1
+                unique_key = key
+                while unique_key in current:
+                    suffix += 1
+                    unique_key = f"{key}_{suffix}"
+                current[unique_key] = (session_df, record_df, meta)
             except Exception as e:
                 logger.error("Error processing file %s: %s", file_info["name"], str(e))
                 current[file_info["name"]] = f"Error: {str(e)}"
