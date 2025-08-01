@@ -5,4 +5,4 @@ from src.app_ui import app_ui
 
 if __name__ == "__main__":
     app = App(app_ui, server)
-    app.run(port=8000)
+    app.run(port=8001)
