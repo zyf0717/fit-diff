@@ -2,7 +2,7 @@
 Supporting utils and functions
 """
 
-from typing import Tuple, Union
+from typing import Tuple, Union, Dict
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 from garmin_fit_sdk import Decoder, Stream
 
 
-def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]:
     """
     Read a FIT file and return:
       - meta_df: one‐row DataFrame of all non‐record messages (e.g. file_id, developer_data_id, etc.)
@@ -41,7 +41,12 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
 
-    return session_df, record_df
+    meta_df = pd.json_normalize(messages.get("file_id_mesgs", []), sep="_")
+    meta_dict: Dict[str, object] = (
+        meta_df.iloc[0].to_dict() if not meta_df.empty else {}
+    )
+
+    return session_df, record_df, meta_dict
 
 
 def create_combined_df(
