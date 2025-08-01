@@ -4,6 +4,7 @@ Supporting utils and functions
 
 from typing import Tuple, Union
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -57,11 +58,11 @@ def create_combined_df(
     for k, v in fit_data_dict.items():
         if not isinstance(v, (list, tuple)) or len(v) < 2:
             continue
-        df = v[1]  # records DataFrame
+        df = v[1]
         if isinstance(df, str) or not isinstance(df, pd.DataFrame) or df.empty:
             continue
         available_cols = [col for col in required_cols if col in df.columns]
-        if len(available_cols) < 2:  # At least timestamp + 1 metric
+        if len(available_cols) < 2:
             continue
         sub_df = df[available_cols].copy()
         sub_df["file"] = k
@@ -71,6 +72,86 @@ def create_combined_df(
         return None
 
     combined_df = pd.concat(relevant_dfs, ignore_index=True)
+    if combined_df.empty:
+        return None
+
+    # # Find common timestamp range across all files
+    # ts_min = combined_df.groupby("file")["timestamp"].min().max()
+    # ts_max = combined_df.groupby("file")["timestamp"].max().min()
+    # if ts_min > ts_max:
+    #     return None
+    # combined_df = combined_df[
+    #     (combined_df["timestamp"] >= ts_min) & (combined_df["timestamp"] <= ts_max)
+    # ]
+    return combined_df if not combined_df.empty else None
+
+
+def remove_outliers(
+    df: pd.DataFrame, metric: str, removal_methods: list
+) -> pd.DataFrame:
+    """Remove outliers from DataFrame based on specified methods."""
+    if df is None or df.empty or metric not in df.columns:
+        return df
+
+    if not removal_methods:
+        return df
+
+    df_filtered = df.copy()
+
+    for method in removal_methods:
+        if method == "remove_zeros":
+            # Remove rows where the metric is zero
+            df_filtered = df_filtered[df_filtered[metric] != 0]
+
+        elif method == "remove_iqr":
+            # Remove outliers using IQR method (1.5 × IQR)
+            Q1 = df_filtered[metric].quantile(0.25)
+            Q3 = df_filtered[metric].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            df_filtered = df_filtered[
+                (df_filtered[metric] >= lower_bound)
+                & (df_filtered[metric] <= upper_bound)
+            ]
+
+        elif method == "remove_zscore":
+            # Remove outliers using Z-score method (|z| > 3)
+            z_scores = np.abs(
+                (df_filtered[metric] - df_filtered[metric].mean())
+                / df_filtered[metric].std()
+            )
+            df_filtered = df_filtered[z_scores <= 3]
+
+        elif method == "remove_percentile":
+            # Remove outliers using percentile method (< 1% or > 99%)
+            lower_percentile = df_filtered[metric].quantile(0.01)
+            upper_percentile = df_filtered[metric].quantile(0.99)
+            df_filtered = df_filtered[
+                (df_filtered[metric] >= lower_percentile)
+                & (df_filtered[metric] <= upper_percentile)
+            ]
+
+    return df_filtered
+
+
+def create_combined_df_with_outlier_removal(
+    fit_data_dict: dict, metrics: Union[str, list], outlier_removal_methods: list = None
+) -> Union[pd.DataFrame, None]:
+    """Create combined DataFrame from fit data with outlier removal for specified metrics."""
+    # First create the basic combined DataFrame
+    combined_df = create_combined_df(fit_data_dict, metrics)
+
+    if combined_df is None or not outlier_removal_methods:
+        return combined_df
+
+    # Apply outlier removal for each metric
+    metrics = [metrics] if isinstance(metrics, str) else metrics
+
+    for metric in metrics:
+        if metric in combined_df.columns:
+            combined_df = remove_outliers(combined_df, metric, outlier_removal_methods)
+
     return combined_df if not combined_df.empty else None
 
 
@@ -174,88 +255,350 @@ def calculate_diff_stats(
     return pd.DataFrame(all_stats) if all_stats else None
 
 
-# def plot_continuous_line(
-#     df: pd.DataFrame,
-#     time_col: str,  # Column should already be in datetime type
-#     value_col: Union[str, list[str]],
-#     value_label: str = None,
-# ) -> px.line:
-#     if df.empty:
-#         return None
+def create_error_histogram(
+    combined_df: pd.DataFrame, metric: str, benchmark_file: str = None
+) -> Union[go.Figure, None]:
+    """Create error distribution histogram from combined DataFrame."""
+    if combined_df is None or combined_df.empty:
+        return None
 
-#     # 1. Normalize to list
-#     cols = [time_col] + (
-#         value_col if isinstance(value_col, (list, tuple)) else [value_col]
-#     )
+    files = combined_df["file"].unique()
+    if len(files) < 2:
+        return None
 
-#     # 2. Clean NaNs/inf
-#     before = len(df)
-#     df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=cols)
-#     dropped = before - len(df)
-#     if dropped:
-#         logger.warning("Dropped %d rows due to NaN/inf in %s", dropped, cols)
+    # Pivot to get each file as a column
+    pivot_df = combined_df.pivot_table(
+        index="timestamp", columns="file", values=metric, aggfunc="first"
+    ).dropna()
 
-#     if df.empty or len(cols) < 2:
-#         return None
+    if pivot_df.empty:
+        return None
 
-#     # 3. Melt always
-#     df_long = df.melt(
-#         id_vars=[time_col],
-#         value_vars=cols[1:],
-#         var_name="variable",
-#         value_name="value",
-#     )
+    # Calculate pairwise errors
+    fig = go.Figure()
 
-#     # 4. If only one value column, use px.line as before (no mean line)
-#     if len(cols) == 2:
-#         fig = px.line(
-#             df_long,
-#             x=time_col,
-#             y="value",
-#             color=None,
-#             markers=True,
-#             line_shape="linear",
-#         )
-#         fig.update_layout(
-#             xaxis_title="Time",
-#             yaxis_title=value_label,
-#         )
-#         fig.update_xaxes(dtick=3600 * 1000)
-#         return fig
+    # If benchmark is specified, compare all others to it
+    if benchmark_file and benchmark_file in files:
+        for file in files:
+            if file != benchmark_file and file in pivot_df.columns:
+                errors = pivot_df[file] - pivot_df[benchmark_file]
+                fig.add_trace(
+                    go.Histogram(
+                        x=errors,
+                        name=f"{file} - {benchmark_file} (ref)",
+                        opacity=0.7,
+                        nbinsx=30,
+                    )
+                )
+    else:
+        # Default: all pairwise comparisons (first file is implicit reference)
+        for i, file1 in enumerate(files):
+            for file2 in files[i + 1 :]:
+                if file1 in pivot_df.columns and file2 in pivot_df.columns:
+                    errors = pivot_df[file2] - pivot_df[file1]
+                    ref_indicator = " (ref)" if i == 0 else ""
+                    fig.add_trace(
+                        go.Histogram(
+                            x=errors,
+                            name=f"{file2} - {file1}{ref_indicator}",
+                            opacity=0.7,
+                            nbinsx=30,
+                        )
+                    )
 
-#     # 5. If multiple value columns, use go.Figure for independent y-axes (no mean lines)
-#     fig = go.Figure()
-#     yaxis_names = []
-#     colors = px.colors.qualitative.Plotly
-#     for i, var in enumerate(cols[1:]):
-#         color = colors[i % len(colors)]
-#         yaxis = "y" if i == 0 else f"y{i+1}"
-#         yaxis_names.append(yaxis)
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=df[time_col],
-#                 y=df[var],
-#                 name=var,
-#                 marker_color=color,
-#                 yaxis=yaxis,
-#                 mode="lines+markers",
-#             )
-#         )
-#     # Layout for multiple y-axes: hide all y-axes and their titles/units
-#     layout = dict(
-#         xaxis=dict(title="Time", dtick=3600 * 1000),
-#         legend=dict(title="Variable"),
-#     )
-#     # Hide all y-axes and their titles
-#     for i, var in enumerate(cols[1:]):
-#         yaxis = "yaxis" if i == 0 else f"yaxis{i+1}"
-#         layout[yaxis] = dict(
-#             title=None,
-#             showticklabels=False,
-#             showgrid=False,
-#             visible=False,
-#             anchor="x",
-#             overlaying="y" if i > 0 else None,
-#         )
-#     fig.update_layout(**layout)
-#     return fig
+    title_suffix = (
+        f" (vs {benchmark_file})" if benchmark_file else " (first file as reference)"
+    )
+    fig.update_layout(
+        title=f"Error Distribution for {metric}{title_suffix}",
+        xaxis_title="Error (measured - reference)",
+        yaxis_title="Frequency",
+        barmode="overlay",
+    )
+
+    return fig
+
+
+def create_bland_altman_plot(
+    combined_df: pd.DataFrame, metric: str, benchmark_file: str = None
+) -> Union[go.Figure, None]:
+    """Create Bland-Altman plot from combined DataFrame."""
+    if combined_df is None or combined_df.empty:
+        return None
+
+    files = combined_df["file"].unique()
+    if len(files) < 2:
+        return None
+
+    # Pivot to get each file as a column
+    pivot_df = combined_df.pivot_table(
+        index="timestamp", columns="file", values=metric, aggfunc="first"
+    ).dropna()
+
+    if pivot_df.empty:
+        return None
+
+    fig = go.Figure()
+
+    # If benchmark is specified, compare all others to it
+    if benchmark_file and benchmark_file in files:
+        for file in files:
+            if file != benchmark_file and file in pivot_df.columns:
+                x_vals = pivot_df[[benchmark_file, file]].mean(axis=1)  # Mean
+                y_vals = pivot_df[file] - pivot_df[benchmark_file]  # Difference
+
+                # Calculate limits of agreement
+                diff_mean = y_vals.mean()
+                diff_std = y_vals.std()
+                upper_loa = diff_mean + 1.96 * diff_std
+                lower_loa = diff_mean - 1.96 * diff_std
+
+                # Add scatter plot
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_vals,
+                        y=y_vals,
+                        mode="markers",
+                        name=f"{file} vs {benchmark_file}",
+                        opacity=0.7,
+                    )
+                )
+
+                # Add mean difference line
+                fig.add_hline(
+                    y=diff_mean,
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text=f"Mean: {diff_mean:.2f}",
+                )
+
+                # Add limits of agreement
+                fig.add_hline(
+                    y=upper_loa,
+                    line_dash="dot",
+                    line_color="orange",
+                    annotation_text=f"+1.96 SD: {upper_loa:.2f}",
+                )
+                fig.add_hline(
+                    y=lower_loa,
+                    line_dash="dot",
+                    line_color="orange",
+                    annotation_text=f"-1.96 SD: {lower_loa:.2f}",
+                )
+    else:
+        # Default: compare all others to first file
+        reference_file = files[0]
+        for file in files[1:]:
+            if file in pivot_df.columns and reference_file in pivot_df.columns:
+                x_vals = pivot_df[[reference_file, file]].mean(axis=1)  # Mean
+                y_vals = pivot_df[file] - pivot_df[reference_file]  # Difference
+
+                # Calculate limits of agreement
+                diff_mean = y_vals.mean()
+                diff_std = y_vals.std()
+                upper_loa = diff_mean + 1.96 * diff_std
+                lower_loa = diff_mean - 1.96 * diff_std
+
+                # Add scatter plot
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_vals,
+                        y=y_vals,
+                        mode="markers",
+                        name=f"{file} vs {reference_file} (ref)",
+                        opacity=0.7,
+                    )
+                )
+
+                # Add mean difference line (only for first comparison to avoid duplicates)
+                if file == files[1]:
+                    fig.add_hline(
+                        y=diff_mean,
+                        line_dash="dash",
+                        line_color="red",
+                        annotation_text=f"Mean: {diff_mean:.2f}",
+                    )
+
+                    # Add limits of agreement
+                    fig.add_hline(
+                        y=upper_loa,
+                        line_dash="dot",
+                        line_color="orange",
+                        annotation_text=f"+1.96 SD: {upper_loa:.2f}",
+                    )
+                    fig.add_hline(
+                        y=lower_loa,
+                        line_dash="dot",
+                        line_color="orange",
+                        annotation_text=f"-1.96 SD: {lower_loa:.2f}",
+                    )
+
+    title_suffix = (
+        f" (vs {benchmark_file})" if benchmark_file else " (vs first file as reference)"
+    )
+    fig.update_layout(
+        title=f"Bland-Altman Plot for {metric}{title_suffix}",
+        xaxis_title=f"Mean of {metric}",
+        yaxis_title=f"Difference in {metric} (measured - reference)",
+        showlegend=True,
+    )
+
+    return fig
+
+
+def create_rolling_error_plot(
+    combined_df: pd.DataFrame,
+    metric: str,
+    benchmark_file: str = None,
+    window_size: int = 50,
+) -> Union[go.Figure, None]:
+    """Create rolling error / time-varying bias plot from combined DataFrame."""
+    if combined_df is None or combined_df.empty:
+        return None
+
+    files = combined_df["file"].unique()
+    if len(files) < 2:
+        return None
+
+    # Pivot to get each file as a column
+    pivot_df = combined_df.pivot_table(
+        index="timestamp", columns="file", values=metric, aggfunc="first"
+    ).dropna()
+
+    if pivot_df.empty:
+        return None
+
+    # Sort by timestamp to ensure proper rolling calculation
+    pivot_df = pivot_df.sort_index()
+
+    fig = go.Figure()
+
+    # If benchmark is specified, compare all others to it
+    if benchmark_file and benchmark_file in files:
+        for file in files:
+            if file != benchmark_file and file in pivot_df.columns:
+                # Calculate differences
+                differences = pivot_df[file] - pivot_df[benchmark_file]
+
+                # Calculate rolling mean and std
+                rolling_mean = differences.rolling(
+                    window=window_size, center=True
+                ).mean()
+                rolling_std = differences.rolling(window=window_size, center=True).std()
+
+                # Add rolling mean line
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=rolling_mean,
+                        mode="lines",
+                        name=f"{file} - {benchmark_file} (rolling mean)",
+                        line=dict(width=2),
+                    )
+                )
+
+                # Add confidence bands (±1 std)
+                upper_band = rolling_mean + rolling_std
+                lower_band = rolling_mean - rolling_std
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=upper_band,
+                        mode="lines",
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo="skip",
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=lower_band,
+                        mode="lines",
+                        line=dict(width=0),
+                        fill="tonexty",
+                        fillcolor=f"rgba(0,100,80,0.2)",
+                        name=f"{file} ±1σ band",
+                        hoverinfo="skip",
+                    )
+                )
+    else:
+        # Default: compare all others to first file
+        reference_file = files[0]
+        colors = ["blue", "red", "green", "orange", "purple"]
+
+        for i, file in enumerate(files[1:]):
+            if file in pivot_df.columns and reference_file in pivot_df.columns:
+                # Calculate differences
+                differences = pivot_df[file] - pivot_df[reference_file]
+
+                # Calculate rolling mean and std
+                rolling_mean = differences.rolling(
+                    window=window_size, center=True
+                ).mean()
+                rolling_std = differences.rolling(window=window_size, center=True).std()
+
+                color = colors[i % len(colors)]
+
+                # Add rolling mean line
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=rolling_mean,
+                        mode="lines",
+                        name=f"{file} - {reference_file} (ref)",
+                        line=dict(width=2, color=color),
+                    )
+                )
+
+                # Add confidence bands (±1 std)
+                upper_band = rolling_mean + rolling_std
+                lower_band = rolling_mean - rolling_std
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=upper_band,
+                        mode="lines",
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo="skip",
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=pivot_df.index,
+                        y=lower_band,
+                        mode="lines",
+                        line=dict(width=0),
+                        fill="tonexty",
+                        fillcolor=f"rgba({i*50},{100-i*20},{80+i*30},0.2)",
+                        name=f"{file} ±1σ band",
+                        hoverinfo="skip",
+                    )
+                )
+
+    # Add horizontal line at zero for reference
+    fig.add_hline(
+        y=0,
+        line_dash="dash",
+        line_color="black",
+        line_width=1,
+        annotation_text="Zero bias",
+    )
+
+    title_suffix = (
+        f" (vs {benchmark_file})" if benchmark_file else " (vs first file as reference)"
+    )
+    fig.update_layout(
+        title=f"Rolling Error / Time-Varying Bias for {metric}{title_suffix}",
+        xaxis_title="Time",
+        yaxis_title=f"Rolling Error in {metric} (window={window_size})",
+        showlegend=True,
+        hovermode="x unified",
+    )
+
+    return fig
