@@ -214,7 +214,7 @@ def create_metric_plot(
                 )
 
     fig.update_layout(
-        title=f"{metric} over Time",
+        # title=f"{metric} over Time",
         xaxis_title="Elapsed Time (seconds)",
         yaxis_title=metric,
         hovermode="x unified",
@@ -225,21 +225,16 @@ def create_metric_plot(
 def calculate_basic_stats(
     test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
-    """Calculate basic statistics for test and reference data."""
-    if (
-        test_data is None
-        or test_data.empty
-        or ref_data is None
-        or ref_data.empty
-        or metric not in test_data.columns
-        or metric not in ref_data.columns
-    ):
+    """Calculate basic statistics for test and reference data using aligned data."""
+    # Get aligned data to ensure equal counts
+    aligned_df = get_aligned_data(test_data, ref_data, metric)
+    if aligned_df is None:
         return None
 
     stats_list = []
 
-    # Calculate stats for test data
-    test_metric = test_data[metric].dropna()
+    # Calculate stats for test data (from aligned data)
+    test_metric = aligned_df[f"{metric}_test"]
     if not test_metric.empty:
         test_stats = {
             "device": "test",
@@ -253,8 +248,8 @@ def calculate_basic_stats(
         }
         stats_list.append(test_stats)
 
-    # Calculate stats for reference data
-    ref_metric = ref_data[metric].dropna()
+    # Calculate stats for reference data (from aligned data)
+    ref_metric = aligned_df[f"{metric}_ref"]
     if not ref_metric.empty:
         ref_stats = {
             "device": "reference",
@@ -339,7 +334,7 @@ def create_error_histogram(
     )
 
     fig.update_layout(
-        title=f"Error Distribution for {metric} (Test vs Reference)",
+        # title=f"Error Distribution for {metric} (Test vs Reference)",
         xaxis_title="Error (test - reference)",
         yaxis_title="Frequency",
         barmode="overlay",
@@ -404,7 +399,7 @@ def create_bland_altman_plot(
     )
 
     fig.update_layout(
-        title=f"Bland-Altman Plot for {metric} (Test vs Reference)",
+        # title=f"Bland-Altman Plot for {metric} (Test vs Reference)",
         xaxis_title=f"Mean of Test and Reference {metric}",
         yaxis_title=f"Difference (Test - Reference) {metric}",
         showlegend=True,
@@ -485,7 +480,7 @@ def create_rolling_error_plot(
     )
 
     fig.update_layout(
-        title=f"Rolling Error / Time-Varying Bias for {metric} (Test vs Reference)",
+        # title=f"Rolling Error / Time-Varying Bias for {metric} (Test vs Reference)",
         xaxis_title="Elapsed Time (seconds)",
         yaxis_title=f"Rolling Error in {metric} (window={window_size})",
         showlegend=True,

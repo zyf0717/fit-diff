@@ -66,6 +66,14 @@ def server(input: Inputs, output: Outputs, session: Session):
             ),
             ui.card(
                 ui.card_header("Rolling Error / Time-Varying Bias"),
+                ui.input_slider(
+                    "rolling_window_size",
+                    "Rolling window size (data points)",
+                    min=10,
+                    max=200,
+                    value=50,
+                    step=10,
+                ),
                 output_widget("rollingErrorPlot"),
             ),
         )
@@ -322,7 +330,12 @@ def server(input: Inputs, output: Outputs, session: Session):
             else "heart_rate"
         )
 
-        return create_rolling_error_plot(test_data, ref_data, metric)
+        # Get window size from slider input
+        window_size = (
+            input.rolling_window_size() if hasattr(input, "rolling_window_size") else 50
+        )
+
+        return create_rolling_error_plot(test_data, ref_data, metric, window_size)
 
     @render.data_frame
     def basicStatsTable():
