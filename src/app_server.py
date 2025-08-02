@@ -9,11 +9,14 @@ from shinywidgets import output_widget, render_widget
 from src.utils import (
     apply_outlier_removal,
     calculate_basic_stats,
-    calculate_diff_stats,
     create_bland_altman_plot,
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
+    get_error_metrics,
+    get_file_information,
+    get_raw_data_sample,
+    get_significance_stats,
     prepare_data_for_analysis,
     process_fit,
 )
@@ -52,9 +55,16 @@ def server(input: Inputs, output: Outputs, session: Session):
                 ui.card_header("Metric Visualization"),
                 output_widget("metricPlot"),
             ),
-            ui.card(
-                ui.card_header("Comparison Statistics"),
-                ui.output_data_frame("diffStatsTable"),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Error Metrics & Bias"),
+                    ui.output_data_frame("errorMetricsTable"),
+                ),
+                ui.card(
+                    ui.card_header("Statistical Significance"),
+                    ui.output_data_frame("significanceTable"),
+                ),
+                col_widths=[6, 6],
             ),
             ui.card(
                 ui.card_header("Error Distribution Histogram"),
@@ -75,6 +85,22 @@ def server(input: Inputs, output: Outputs, session: Session):
                     step=10,
                 ),
                 output_widget("rollingErrorPlot"),
+            ),
+            ui.card(
+                ui.card_header("File Information"),
+                ui.output_data_frame("fileInfoTable"),
+            ),
+            ui.card(
+                ui.card_header("Raw Data Sample"),
+                ui.input_slider(
+                    "raw_data_sample_size",
+                    "Sample size",
+                    min=50,
+                    max=500,
+                    value=100,
+                    step=50,
+                ),
+                ui.output_data_frame("rawDataTable"),
             ),
         )
 
@@ -346,9 +372,43 @@ def server(input: Inputs, output: Outputs, session: Session):
         return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
-    def diffStatsTable():
+    def errorMetricsTable():
         prepared_data = _get_prepared_data()
         if prepared_data is None:
             return pd.DataFrame()
         test_data, ref_data = prepared_data
-        return calculate_diff_stats(test_data, ref_data, input.comparison_metric())
+        return get_error_metrics(test_data, ref_data, input.comparison_metric())
+
+    @render.data_frame
+    def significanceTable():
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
+            return pd.DataFrame()
+        test_data, ref_data = prepared_data
+        return get_significance_stats(test_data, ref_data, input.comparison_metric())
+
+    @render.data_frame
+    def fileInfoTable():
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
+            return pd.DataFrame()
+        test_data, ref_data = prepared_data
+        return get_file_information(test_data, ref_data)
+
+    @render.data_frame
+    def rawDataTable():
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
+            return pd.DataFrame()
+        test_data, ref_data = prepared_data
+        metric = (
+            input.comparison_metric()
+            if hasattr(input, "comparison_metric")
+            else "heart_rate"
+        )
+        sample_size = (
+            input.raw_data_sample_size()
+            if hasattr(input, "raw_data_sample_size")
+            else 100
+        )
+        return get_raw_data_sample(test_data, ref_data, metric, sample_size)

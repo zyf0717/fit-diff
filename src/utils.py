@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from garmin_fit_sdk import Decoder, Stream
+from scipy import stats
 
 
 def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -270,44 +271,88 @@ def calculate_basic_stats(
     return stats_df.round(2)
 
 
-def calculate_diff_stats(
+def get_error_metrics(
     test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
-    """Calculate comparison statistics between test and reference data."""
+    """Get error metrics and bias statistics in a transposed format."""
     aligned_df = get_aligned_data(test_data, ref_data, metric)
     if aligned_df is None:
         return None
 
     test_aligned = aligned_df[f"{metric}_test"]
     ref_aligned = aligned_df[f"{metric}_ref"]
+    errors = test_aligned - ref_aligned
 
     # Calculate error metrics
-    errors = test_aligned - ref_aligned
     mae = errors.abs().mean()
     mse = (errors**2).mean()
     rmse = mse**0.5
-    correlation = test_aligned.corr(ref_aligned)
-
-    # Calculate bias and limits of agreement for Bland-Altman
     bias = errors.mean()
     std_errors = errors.std()
     loa_upper = bias + 1.96 * std_errors
     loa_lower = bias - 1.96 * std_errors
+    correlation = test_aligned.corr(ref_aligned)
 
-    stats = {
-        "metric": metric,
-        "comparison": "test vs reference",
-        "mae": round(mae, 3),
-        "mse": round(mse, 3),
-        "rmse": round(rmse, 3),
-        "bias": round(bias, 3),
-        "loa_upper": round(loa_upper, 3),
-        "loa_lower": round(loa_lower, 3),
-        "correlation": round(correlation, 3),
-        "points": len(aligned_df),
+    # Create transposed dataframe
+    error_metrics = {
+        "Mean Absolute Error (MAE)": round(mae, 3),
+        "Mean Squared Error (MSE)": round(mse, 3),
+        "Root Mean Squared Error (RMSE)": round(rmse, 3),
+        "Bias (Mean Difference)": round(bias, 3),
+        "Standard Deviation of Errors": round(std_errors, 3),
+        "Upper Limit of Agreement": round(loa_upper, 3),
+        "Lower Limit of Agreement": round(loa_lower, 3),
+        "Correlation Coefficient": round(correlation, 3),
+        "Number of Data Points": len(aligned_df),
     }
 
-    return pd.DataFrame([stats])
+    # Convert to transposed DataFrame
+    df = pd.DataFrame(list(error_metrics.items()), columns=["Metric", "Value"])
+    return df
+
+
+def get_significance_stats(
+    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+) -> Union[pd.DataFrame, None]:
+    """Get statistical significance testing results in a transposed format."""
+    aligned_df = get_aligned_data(test_data, ref_data, metric)
+    if aligned_df is None:
+        return None
+
+    test_aligned = aligned_df[f"{metric}_test"]
+    ref_aligned = aligned_df[f"{metric}_ref"]
+    errors = test_aligned - ref_aligned
+    n_points = len(aligned_df)
+
+    # Statistical tests
+    t_stat, p_value = stats.ttest_1samp(errors, 0)
+    bias = errors.mean()
+    std_errors = errors.std()
+    cohens_d = bias / std_errors if std_errors > 0 else np.nan
+    _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
+
+    # 95% Confidence interval for bias
+    confidence_interval = stats.t.interval(
+        0.95, n_points - 1, loc=bias, scale=stats.sem(errors)
+    )
+
+    # Create transposed dataframe
+    significance_stats = {
+        "T-statistic": round(t_stat, 3),
+        "P-value (Bias ≠ 0)": round(p_value, 4),
+        "Statistically Significant?": "Yes" if p_value < 0.05 else "No",
+        "Effect Size (Cohen's d)": (
+            round(cohens_d, 3) if not np.isnan(cohens_d) else "N/A"
+        ),
+        "Bias 95% CI Lower": round(confidence_interval[0], 3),
+        "Bias 95% CI Upper": round(confidence_interval[1], 3),
+        "Correlation P-value": round(r_p_value, 4),
+        "Correlation Significant?": "Yes" if r_p_value < 0.05 else "No",
+    }
+
+    # Convert to transposed DataFrame
+    df = pd.DataFrame(list(significance_stats.items()), columns=["Test", "Result"])
+    return df
 
 
 def create_error_histogram(
@@ -488,3 +533,141 @@ def create_rolling_error_plot(
     )
 
     return fig
+
+
+def get_file_information(
+    test_data: pd.DataFrame, ref_data: pd.DataFrame
+) -> Union[pd.DataFrame, None]:
+    """Get file information for test and reference data showing raw data before filtering."""
+    # Get the original data before any filtering by accessing the _all_fit_data directly
+    # For now, we'll work with the current data but show all available info
+    if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
+        return None
+
+    file_info_list = []
+
+    # Process test data files
+    for filename in test_data["filename"].unique():
+        file_subset = test_data[test_data["filename"] == filename]
+        if not file_subset.empty and "timestamp" in file_subset.columns:
+            # Get all available metrics (not just the selected one)
+            all_metrics = [
+                col
+                for col in file_subset.columns
+                if col not in ["timestamp", "filename", "elapsed_seconds"]
+                and file_subset[col].notna().any()
+            ]
+
+            file_info = {
+                "filename": filename,
+                "device_type": "test",
+                "records_after_alignment": len(file_subset),
+                "start_time": file_subset["timestamp"].min(),
+                "end_time": file_subset["timestamp"].max(),
+                "duration_minutes": round(
+                    (
+                        file_subset["timestamp"].max() - file_subset["timestamp"].min()
+                    ).total_seconds()
+                    / 60,
+                    1,
+                ),
+                "sampling_rate_hz": round(
+                    len(file_subset)
+                    / (
+                        (
+                            file_subset["timestamp"].max()
+                            - file_subset["timestamp"].min()
+                        ).total_seconds()
+                    ),
+                    2,
+                ),
+                "available_metrics": ", ".join(sorted(all_metrics)),
+                "metric_count": len(all_metrics),
+            }
+            file_info_list.append(file_info)
+
+    # Process reference data files
+    for filename in ref_data["filename"].unique():
+        file_subset = ref_data[ref_data["filename"] == filename]
+        if not file_subset.empty and "timestamp" in file_subset.columns:
+            # Get all available metrics (not just the selected one)
+            all_metrics = [
+                col
+                for col in file_subset.columns
+                if col not in ["timestamp", "filename", "elapsed_seconds"]
+                and file_subset[col].notna().any()
+            ]
+
+            file_info = {
+                "filename": filename,
+                "device_type": "reference",
+                "records_after_alignment": len(file_subset),
+                "start_time": file_subset["timestamp"].min(),
+                "end_time": file_subset["timestamp"].max(),
+                "duration_minutes": round(
+                    (
+                        file_subset["timestamp"].max() - file_subset["timestamp"].min()
+                    ).total_seconds()
+                    / 60,
+                    1,
+                ),
+                "sampling_rate_hz": round(
+                    len(file_subset)
+                    / (
+                        (
+                            file_subset["timestamp"].max()
+                            - file_subset["timestamp"].min()
+                        ).total_seconds()
+                    ),
+                    2,
+                ),
+                "available_metrics": ", ".join(sorted(all_metrics)),
+                "metric_count": len(all_metrics),
+            }
+            file_info_list.append(file_info)
+
+    if not file_info_list:
+        return None
+
+    return pd.DataFrame(file_info_list)
+
+
+def get_raw_data_sample(
+    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str, sample_size: int = 100
+) -> Union[pd.DataFrame, None]:
+    """Get a sample of raw aligned data for inspection."""
+    aligned_df = get_aligned_data(test_data, ref_data, metric)
+    if aligned_df is None:
+        return None
+
+    # Sort by timestamp and take a sample
+    aligned_df = aligned_df.sort_values("timestamp")
+
+    # Take evenly spaced samples if data is large
+    if len(aligned_df) > sample_size:
+        step = len(aligned_df) // sample_size
+        sample_df = aligned_df.iloc[::step][:sample_size]
+    else:
+        sample_df = aligned_df
+
+    # Reorder columns for better readability
+    columns_order = [
+        "timestamp",
+        "elapsed_seconds_test",
+        "elapsed_seconds_ref",
+        f"{metric}_test",
+        f"{metric}_ref",
+    ]
+
+    # Only include columns that exist
+    available_columns = [col for col in columns_order if col in sample_df.columns]
+    sample_df = sample_df[available_columns].copy()
+
+    # Add difference column
+    sample_df["difference"] = sample_df[f"{metric}_test"] - sample_df[f"{metric}_ref"]
+
+    # Round numeric values for better display
+    numeric_columns = sample_df.select_dtypes(include=[np.number]).columns
+    sample_df[numeric_columns] = sample_df[numeric_columns].round(3)
+
+    return sample_df
