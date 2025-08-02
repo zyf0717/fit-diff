@@ -30,10 +30,10 @@ conda activate fit-diff
 Run the application:
 
 ```bash
-python app.py
+python fit_diff.py
 ```
 
-Then open your browser to the displayed URL (typically <http://localhost:8000>).
+Then open your browser to the displayed URL (typically <http://localhost:8001>).
 
 ## Testing
 

@@ -2,6 +2,7 @@
 Supporting utils and functions
 """
 
+from pathlib import Path
 from typing import Tuple, Union
 
 import numpy as np
@@ -36,12 +37,12 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if "position_lat" in record_df.columns and "position_long" in record_df.columns:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
-    record_df["filename"] = file_path.split("/")[-1]
+    record_df["filename"] = Path(file_path).name
 
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-    session_df["filename"] = file_path.split("/")[-1]
+    session_df["filename"] = Path(file_path).name
 
     return session_df, record_df
 
