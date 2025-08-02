@@ -7,13 +7,14 @@ from shiny.types import FileInfo
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
+    apply_outlier_removal,
     calculate_basic_stats,
     calculate_diff_stats,
     create_bland_altman_plot,
-    create_combined_df_with_outlier_removal,
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
+    prepare_data_for_analysis,
     process_fit,
 )
 
@@ -240,7 +241,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         return sorted(list(common_metrics))
 
     @reactive.Calc
-    def _get_combined_df():
+    def _get_prepared_data():
         metric = (
             input.comparison_metric()
             if hasattr(input, "comparison_metric")
@@ -252,71 +253,89 @@ def server(input: Inputs, output: Outputs, session: Session):
         if hasattr(input, "outlier_removal"):
             outlier_methods = input.outlier_removal() or []
 
-        return create_combined_df_with_outlier_removal(
-            _all_fit_data(), metric, outlier_methods
-        )
+        # Prepare data for analysis
+        prepared_data = prepare_data_for_analysis(_all_fit_data(), metric)
+        if prepared_data is None:
+            return None
+
+        test_data, ref_data = prepared_data
+
+        # Apply outlier removal if specified
+        if outlier_methods:
+            result = apply_outlier_removal(test_data, ref_data, metric, outlier_methods)
+            if result is None:
+                return None
+            test_data, ref_data = result
+
+        return test_data, ref_data
 
     @render_widget
     def metricPlot():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return None
+        test_data, ref_data = prepared_data
         metric = (
             input.comparison_metric()
             if hasattr(input, "comparison_metric")
             else "heart_rate"
         )
-        return create_metric_plot(combined_df, metric)
+        return create_metric_plot(test_data, ref_data, metric)
 
     @render_widget
     def errorHistogramPlot():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return None
+        test_data, ref_data = prepared_data
         metric = (
             input.comparison_metric()
             if hasattr(input, "comparison_metric")
             else "heart_rate"
         )
 
-        return create_error_histogram(combined_df, metric)
+        return create_error_histogram(test_data, ref_data, metric)
 
     @render_widget
     def blandAltmanPlot():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return None
+        test_data, ref_data = prepared_data
         metric = (
             input.comparison_metric()
             if hasattr(input, "comparison_metric")
             else "heart_rate"
         )
 
-        return create_bland_altman_plot(combined_df, metric)
+        return create_bland_altman_plot(test_data, ref_data, metric)
 
     @render_widget
     def rollingErrorPlot():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return None
+        test_data, ref_data = prepared_data
         metric = (
             input.comparison_metric()
             if hasattr(input, "comparison_metric")
             else "heart_rate"
         )
 
-        return create_rolling_error_plot(combined_df, metric)
+        return create_rolling_error_plot(test_data, ref_data, metric)
 
     @render.data_frame
     def basicStatsTable():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return pd.DataFrame()
-        return calculate_basic_stats(combined_df, input.comparison_metric())
+        test_data, ref_data = prepared_data
+        return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def diffStatsTable():
-        combined_df = _get_combined_df()
-        if combined_df is None:
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
             return pd.DataFrame()
-        return calculate_diff_stats(combined_df, input.comparison_metric())
+        test_data, ref_data = prepared_data
+        return calculate_diff_stats(test_data, ref_data, input.comparison_metric())
