@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 from shiny import Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
-from shinywidgets import render_widget
+from shinywidgets import output_widget, render_widget
 
 from src.utils import (
     calculate_basic_stats,
@@ -21,7 +21,85 @@ logger = logging.getLogger(__name__)
 
 
 def server(input: Inputs, output: Outputs, session: Session):
-    fit_data = reactive.Value({})
+    @render.ui
+    def main_content():
+        # Only render main content when at least one file from each type is uploaded
+        test_files = input.test_file_upload()
+        ref_files = input.ref_file_upload()
+
+        if not test_files or not ref_files:
+            return ui.div(
+                ui.p(
+                    "Please upload at least one test file and one reference file to begin."
+                ),
+                style="text-align: center; margin-top: 50px; color: #666;",
+            )
+
+        return ui.div(
+            ui.layout_columns(
+                ui.output_ui("testFileSelector"),
+                ui.output_ui("refFileSelector"),
+                ui.output_ui("comparisonMetricSelector"),
+                ui.output_ui("outlierRemovalSelector"),
+                col_widths=[3, 3, 3, 3],
+            ),
+            ui.card(
+                ui.card_header("File Statistics"),
+                ui.output_data_frame("basicStatsTable"),
+            ),
+            ui.card(
+                ui.card_header("Metric Visualization"),
+                output_widget("metricPlot"),
+            ),
+            ui.card(
+                ui.card_header("Comparison Statistics"),
+                ui.output_data_frame("diffStatsTable"),
+            ),
+            ui.card(
+                ui.card_header("Error Distribution Histogram"),
+                output_widget("errorHistogramPlot"),
+            ),
+            ui.card(
+                ui.card_header("Bland-Altman Plot"),
+                output_widget("blandAltmanPlot"),
+            ),
+            ui.card(
+                ui.card_header("Rolling Error / Time-Varying Bias"),
+                output_widget("rollingErrorPlot"),
+            ),
+        )
+
+    @render.ui
+    def testFileSelector():
+        test_files = input.test_file_upload()
+        if not test_files:
+            return None
+
+        file_choices = {
+            file_info["name"]: file_info["name"] for file_info in test_files
+        }
+        return ui.input_selectize(
+            "selected_test_files",
+            "Select test files to use:",
+            choices=file_choices,
+            selected=list(file_choices.keys()),  # Default to all selected
+            multiple=True,
+        )
+
+    @render.ui
+    def refFileSelector():
+        ref_files = input.ref_file_upload()
+        if not ref_files:
+            return None
+
+        file_choices = {file_info["name"]: file_info["name"] for file_info in ref_files}
+        return ui.input_selectize(
+            "selected_ref_files",
+            "Select reference files to use:",
+            choices=file_choices,
+            selected=list(file_choices.keys()),  # Default to all selected
+            multiple=True,
+        )
 
     @render.ui
     def comparisonMetricSelector():
@@ -33,30 +111,6 @@ def server(input: Inputs, output: Outputs, session: Session):
             "Select comparison metric:",
             choices=choices,
             selected="heart_rate",
-        )
-
-    @render.ui
-    def fileSelector():
-        files = list(fit_data().keys())
-        if not files:
-            return None
-        return ui.input_select(
-            "selected_file",
-            "Select file:",
-            choices=files,
-            selected=files[0] if files else None,
-        )
-
-    @render.ui
-    def benchmarkSelector():
-        files = list(fit_data().keys())
-        if len(files) < 2:
-            return None
-        return ui.input_select(
-            "benchmark_file",
-            "Select reference/benchmark file:",
-            choices=["Auto (first file)"] + files,
-            selected="Auto (first file)",
         )
 
     @render.ui
@@ -74,48 +128,116 @@ def server(input: Inputs, output: Outputs, session: Session):
             multiple=True,
         )
 
-    @reactive.Effect
-    @reactive.event(input.file_upload)
-    def _process_uploaded_files():
-        files: List[FileInfo] = input.file_upload()
-        if not files:
-            return
-        current = fit_data().copy()
-        for file_info in files:
+    @reactive.Calc
+    def _process_test_device_files():
+        test_files: List[FileInfo] = input.test_file_upload()
+        if not test_files:
+            return {}
+
+        # Get selected test files
+        selected_files = []
+        if hasattr(input, "selected_test_files") and input.selected_test_files():
+            selected_files = input.selected_test_files()
+        else:
+            # Default to all files if no selection made yet
+            selected_files = [file_info["name"] for file_info in test_files]
+
+        test_device_data = {}
+        for file_info in test_files:
+            # Only process selected files
+            if file_info["name"] not in selected_files:
+                continue
+
             try:
                 uploaded_file_path = file_info["datapath"]
-                fit_df = process_fit(uploaded_file_path)
-                current[file_info["name"]] = fit_df
+                _, record_df = process_fit(uploaded_file_path)
+                test_device_data[file_info["name"]] = (
+                    record_df  # Use record_df for analysis
+                )
             except Exception as e:
-                logger.error("Error processing file %s: %s", file_info["name"], str(e))
-                current[file_info["name"]] = f"Error: {str(e)}"
-        fit_data.set(current)
+                logger.error(
+                    "Error processing test device file %s: %s",
+                    file_info["name"],
+                    str(e),
+                )
+                test_device_data[file_info["name"]] = f"Error: {str(e)}"
+        return test_device_data
+
+    @reactive.Calc
+    def _process_reference_device_files():
+        ref_files: List[FileInfo] = input.ref_file_upload()
+        if not ref_files:
+            return {}
+
+        # Get selected reference files
+        selected_files = []
+        if hasattr(input, "selected_ref_files") and input.selected_ref_files():
+            selected_files = input.selected_ref_files()
+        else:
+            # Default to all files if no selection made yet
+            selected_files = [file_info["name"] for file_info in ref_files]
+
+        ref_device_data = {}
+        for file_info in ref_files:
+            # Only process selected files
+            if file_info["name"] not in selected_files:
+                continue
+
+            try:
+                uploaded_file_path = file_info["datapath"]
+                _, record_df = process_fit(uploaded_file_path)
+                ref_device_data[file_info["name"]] = record_df
+            except Exception as e:
+                logger.error(
+                    "Error processing reference device file %s: %s",
+                    file_info["name"],
+                    str(e),
+                )
+                ref_device_data[file_info["name"]] = f"Error: {str(e)}"
+        return ref_device_data
+
+    @reactive.Calc
+    def _all_fit_data():
+        test_data = _process_test_device_files()
+        ref_data = _process_reference_device_files()
+        all_test_data = [
+            df for _, df in test_data.items() if isinstance(df, pd.DataFrame)
+        ]
+        all_ref_data = [
+            df for _, df in ref_data.items() if isinstance(df, pd.DataFrame)
+        ]
+
+        if not all_test_data or not all_ref_data:
+            logger.warning(
+                "No FIT data available from either test or reference devices."
+            )
+            # Return two empty DataFrames to avoid ValueError
+            return pd.DataFrame(), pd.DataFrame()
+
+        test_data_df = pd.concat(all_test_data, ignore_index=True)
+        ref_data_df = pd.concat(all_ref_data, ignore_index=True)
+
+        return test_data_df, ref_data_df
 
     @reactive.Calc
     def _get_common_metrics():
-        data_dict = fit_data()
-        if not data_dict:
+        fit_data = _all_fit_data()
+        if len(fit_data) != 2:
             return []
 
-        valid_dfs = []
-        for v in data_dict.values():
-            if isinstance(v, (list, tuple)) and len(v) >= 2:
-                df = v[1]  # records DataFrame
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    valid_dfs.append(df)
-
-        if not valid_dfs:
+        test_df, ref_df = fit_data
+        if test_df.empty or ref_df.empty:
             return []
 
-        # Get intersection of all column sets
-        common_cols = set(valid_dfs[0].columns)
-        for df in valid_dfs[1:]:
-            common_cols &= set(df.columns)
+        test_data_columns = set(test_df.columns)
+        ref_data_columns = set(ref_df.columns)
 
-        # Exclude timestamp columns
-        common_cols = {col for col in common_cols if "timestamp" not in col.lower()}
-
-        return sorted(list(common_cols))
+        common_metrics = test_data_columns.intersection(ref_data_columns)
+        if "timestamp" in common_metrics:
+            common_metrics.remove("timestamp")
+        if "filename" in common_metrics:
+            common_metrics.remove("filename")
+        return sorted(list(common_metrics))
 
     @reactive.Calc
     def _get_combined_df():
@@ -131,7 +253,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             outlier_methods = input.outlier_removal() or []
 
         return create_combined_df_with_outlier_removal(
-            fit_data(), metric, outlier_methods
+            _all_fit_data(), metric, outlier_methods
         )
 
     @render_widget
@@ -157,14 +279,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             else "heart_rate"
         )
 
-        # Get benchmark file selection
-        benchmark = None
-        if hasattr(input, "benchmark_file"):
-            selected = input.benchmark_file()
-            if selected and selected != "Auto (first file)":
-                benchmark = selected
-
-        return create_error_histogram(combined_df, metric, benchmark)
+        return create_error_histogram(combined_df, metric)
 
     @render_widget
     def blandAltmanPlot():
@@ -177,14 +292,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             else "heart_rate"
         )
 
-        # Get benchmark file selection
-        benchmark = None
-        if hasattr(input, "benchmark_file"):
-            selected = input.benchmark_file()
-            if selected and selected != "Auto (first file)":
-                benchmark = selected
-
-        return create_bland_altman_plot(combined_df, metric, benchmark)
+        return create_bland_altman_plot(combined_df, metric)
 
     @render_widget
     def rollingErrorPlot():
@@ -197,14 +305,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             else "heart_rate"
         )
 
-        # Get benchmark file selection
-        benchmark = None
-        if hasattr(input, "benchmark_file"):
-            selected = input.benchmark_file()
-            if selected and selected != "Auto (first file)":
-                benchmark = selected
-
-        return create_rolling_error_plot(combined_df, metric, benchmark)
+        return create_rolling_error_plot(combined_df, metric)
 
     @render.data_frame
     def basicStatsTable():
@@ -219,23 +320,3 @@ def server(input: Inputs, output: Outputs, session: Session):
         if combined_df is None:
             return pd.DataFrame()
         return calculate_diff_stats(combined_df, input.comparison_metric())
-
-    def _render_fit_dataframe(index: int):
-        selected = input.selected_file()
-        if not selected:
-            return pd.DataFrame()
-        df_tuple = fit_data().get(selected)
-        if not df_tuple or len(df_tuple) <= index:
-            return pd.DataFrame()
-        df = df_tuple[index]
-        if isinstance(df, str):
-            return pd.DataFrame({"error": [df]})
-        return df.copy() if df is not None and not df.empty else pd.DataFrame()
-
-    @render.data_frame
-    def renderFitSessionDataFrame():
-        return _render_fit_dataframe(0)
-
-    @render.data_frame
-    def renderFitRecordsDataFrame():
-        return _render_fit_dataframe(1)

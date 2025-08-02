@@ -45,44 +45,32 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def create_combined_df(
-    fit_data_dict: dict, metrics: Union[str, list]
+    all_fit_data: tuple, metrics: Union[str, list]
 ) -> Union[pd.DataFrame, None]:
     """Create combined DataFrame from fit data for specified metrics."""
-    if not fit_data_dict:
-        return None
+    if (
+        not all_fit_data
+        or not isinstance(all_fit_data, tuple)
+        or len(all_fit_data) != 2
+    ):
+        return pd.DataFrame()
+
+    test_data_df, ref_data_df = all_fit_data
+    if test_data_df.empty or ref_data_df.empty:
+        return pd.DataFrame()
 
     metrics = [metrics] if isinstance(metrics, str) else metrics
     required_cols = ["timestamp"] + metrics
 
-    relevant_dfs = []
-    for k, v in fit_data_dict.items():
-        if not isinstance(v, (list, tuple)) or len(v) < 2:
-            continue
-        df = v[1]
-        if isinstance(df, str) or not isinstance(df, pd.DataFrame) or df.empty:
-            continue
-        available_cols = [col for col in required_cols if col in df.columns]
-        if len(available_cols) < 2:
-            continue
-        sub_df = df[available_cols].copy()
-        sub_df["file"] = k
-        relevant_dfs.append(sub_df)
+    test_data_df = test_data_df[required_cols].copy()
+    test_data_df["source"] = "test"
 
-    if not relevant_dfs:
-        return None
+    ref_data_df = ref_data_df[required_cols].copy()
+    ref_data_df["source"] = "reference"
 
-    combined_df = pd.concat(relevant_dfs, ignore_index=True)
+    combined_df = pd.concat([test_data_df, ref_data_df], ignore_index=True)
     if combined_df.empty:
-        return None
-
-    # # Find common timestamp range across all files
-    # ts_min = combined_df.groupby("file")["timestamp"].min().max()
-    # ts_max = combined_df.groupby("file")["timestamp"].max().min()
-    # if ts_min > ts_max:
-    #     return None
-    # combined_df = combined_df[
-    #     (combined_df["timestamp"] >= ts_min) & (combined_df["timestamp"] <= ts_max)
-    # ]
+        return pd.DataFrame()
     return combined_df if not combined_df.empty else None
 
 
@@ -136,11 +124,11 @@ def remove_outliers(
 
 
 def create_combined_df_with_outlier_removal(
-    fit_data_dict: dict, metrics: Union[str, list], outlier_removal_methods: list = None
+    all_fit_data: tuple, metrics: Union[str, list], outlier_removal_methods: list = None
 ) -> Union[pd.DataFrame, None]:
     """Create combined DataFrame from fit data with outlier removal for specified metrics."""
     # First create the basic combined DataFrame
-    combined_df = create_combined_df(fit_data_dict, metrics)
+    combined_df = create_combined_df(all_fit_data, metrics)
 
     if combined_df is None or not outlier_removal_methods:
         return combined_df
@@ -152,7 +140,7 @@ def create_combined_df_with_outlier_removal(
         if metric in combined_df.columns:
             combined_df = remove_outliers(combined_df, metric, outlier_removal_methods)
 
-    return combined_df if not combined_df.empty else None
+    return combined_df if not combined_df.empty else pd.DataFrame()
 
 
 def create_metric_plot(
@@ -165,153 +153,179 @@ def create_metric_plot(
     metrics = [metrics] if isinstance(metrics, str) else metrics
 
     if len(metrics) == 1:
-        return px.line(combined_df, x="timestamp", y=metrics[0], color="file")
+        return px.line(combined_df, x="timestamp", y=metrics[0], color="source")
 
     # Multiple metrics: melt for faceted plot
     melted_df = combined_df.melt(
-        id_vars=["timestamp", "file"],
+        id_vars=["timestamp", "source"],
         value_vars=metrics,
         var_name="metric",
         value_name="value",
     )
     return px.line(
-        melted_df, x="timestamp", y="value", color="file", facet_col="metric"
+        melted_df, x="timestamp", y="value", color="source", facet_col="metric"
     )
 
 
 def calculate_basic_stats(
     combined_df: pd.DataFrame, metrics: Union[str, list]
 ) -> Union[pd.DataFrame, None]:
-    """Calculate basic statistics for each file and metric."""
+    """Calculate basic statistics for test and reference data."""
     if combined_df is None or combined_df.empty:
         return None
 
     metrics = [metrics] if isinstance(metrics, str) else metrics
-    available_metrics = [m for m in metrics if m in combined_df.columns]
-
-    if not available_metrics:
-        return None
 
     stats_list = []
-    for metric in available_metrics:
-        metric_stats = (
-            combined_df.groupby("file")[metric]
-            .agg(["count", "mean", "std", "min", "max", "median"])
-            .round(2)
-            .reset_index()
-        )
-        metric_stats["metric"] = metric
-        stats_list.append(metric_stats)
+    for metric in metrics:
+        if metric not in combined_df.columns:
+            continue
 
-    return pd.concat(stats_list, ignore_index=True)
+        # Calculate stats for test data
+        test_data = combined_df[combined_df["source"] == "test"][metric]
+        if not test_data.empty:
+            test_stats = {
+                "device": "test",
+                "metric": metric,
+                "count": test_data.count(),
+                "mean": test_data.mean(),
+                "std": test_data.std(),
+                "min": test_data.min(),
+                "max": test_data.max(),
+                "median": test_data.median(),
+            }
+            stats_list.append(test_stats)
+
+        # Calculate stats for reference data
+        ref_data = combined_df[combined_df["source"] == "reference"][metric]
+        if not ref_data.empty:
+            ref_stats = {
+                "device": "reference",
+                "metric": metric,
+                "count": ref_data.count(),
+                "mean": ref_data.mean(),
+                "std": ref_data.std(),
+                "min": ref_data.min(),
+                "max": ref_data.max(),
+                "median": ref_data.median(),
+            }
+            stats_list.append(ref_stats)
+
+    if not stats_list:
+        return None
+
+    stats_df = pd.DataFrame(stats_list)
+    return stats_df.round(2)
 
 
 def calculate_diff_stats(
     combined_df: pd.DataFrame, metrics: Union[str, list]
 ) -> Union[pd.DataFrame, None]:
-    """Calculate pairwise comparison statistics between files for each metric."""
+    """Calculate comparison statistics between test and reference data."""
     if combined_df is None or combined_df.empty:
         return None
 
-    files = combined_df["file"].unique()
-    if len(files) < 2:
-        return None
-
     metrics = [metrics] if isinstance(metrics, str) else metrics
-    available_metrics = [m for m in metrics if m in combined_df.columns]
-
-    if not available_metrics:
-        return None
 
     all_stats = []
-    for metric in available_metrics:
-        pivot_df = combined_df.pivot_table(
-            index="timestamp", columns="file", values=metric, aggfunc="first"
-        ).dropna()
-
-        if pivot_df.empty:
+    for metric in metrics:
+        if metric not in combined_df.columns:
             continue
 
-        for i, file1 in enumerate(files):
-            for file2 in files[i + 1 :]:
-                if file1 in pivot_df.columns and file2 in pivot_df.columns:
-                    y1, y2 = pivot_df[file1], pivot_df[file2]
-                    mae = (y1 - y2).abs().mean()
-                    mse = ((y1 - y2) ** 2).mean()
+        # Get test and reference data
+        test_data = combined_df[combined_df["source"] == "test"][
+            ["timestamp", metric]
+        ].dropna()
+        ref_data = combined_df[combined_df["source"] == "reference"][
+            ["timestamp", metric]
+        ].dropna()
 
-                    all_stats.append(
-                        {
-                            "metric": metric,
-                            "file1": file1,
-                            "file2": file2,
-                            "mae": round(mae, 2),
-                            "mse": round(mse, 2),
-                            "rmse": round(mse**0.5, 2),
-                            "correlation": round(y1.corr(y2), 3),
-                            "points": len(y1),
-                        }
-                    )
+        # Merge on timestamp to align the data
+        aligned_df = pd.merge(
+            test_data, ref_data, on="timestamp", suffixes=("_test", "_ref")
+        )
+
+        if aligned_df.empty:
+            continue
+
+        test_aligned = aligned_df[f"{metric}_test"]
+        ref_aligned = aligned_df[f"{metric}_ref"]
+
+        # Calculate error metrics
+        errors = test_aligned - ref_aligned
+        mae = errors.abs().mean()
+        mse = (errors**2).mean()
+        rmse = mse**0.5
+        correlation = test_aligned.corr(ref_aligned)
+
+        # Calculate bias and limits of agreement for Bland-Altman
+        bias = errors.mean()
+        std_errors = errors.std()
+        loa_upper = bias + 1.96 * std_errors
+        loa_lower = bias - 1.96 * std_errors
+
+        all_stats.append(
+            {
+                "metric": metric,
+                "comparison": "test vs reference",
+                "mae": round(mae, 3),
+                "mse": round(mse, 3),
+                "rmse": round(rmse, 3),
+                "bias": round(bias, 3),
+                "loa_upper": round(loa_upper, 3),
+                "loa_lower": round(loa_lower, 3),
+                "correlation": round(correlation, 3),
+                "points": len(aligned_df),
+            }
+        )
 
     return pd.DataFrame(all_stats) if all_stats else None
 
 
 def create_error_histogram(
-    combined_df: pd.DataFrame, metric: str, benchmark_file: str = None
+    combined_df: pd.DataFrame, metric: str
 ) -> Union[go.Figure, None]:
     """Create error distribution histogram from combined DataFrame."""
     if combined_df is None or combined_df.empty:
         return None
 
-    files = combined_df["file"].unique()
-    if len(files) < 2:
+    if metric not in combined_df.columns:
         return None
 
-    # Pivot to get each file as a column
-    pivot_df = combined_df.pivot_table(
-        index="timestamp", columns="file", values=metric, aggfunc="first"
-    ).dropna()
+    # Get test and reference data
+    test_data = combined_df[combined_df["source"] == "test"][
+        ["timestamp", metric]
+    ].dropna()
+    ref_data = combined_df[combined_df["source"] == "reference"][
+        ["timestamp", metric]
+    ].dropna()
 
-    if pivot_df.empty:
+    # Merge on timestamp to align the data
+    aligned_df = pd.merge(
+        test_data, ref_data, on="timestamp", suffixes=("_test", "_ref")
+    )
+
+    if aligned_df.empty:
         return None
 
-    # Calculate pairwise errors
+    # Calculate errors (test - reference)
+    errors = aligned_df[f"{metric}_test"] - aligned_df[f"{metric}_ref"]
+
     fig = go.Figure()
 
-    # If benchmark is specified, compare all others to it
-    if benchmark_file and benchmark_file in files:
-        for file in files:
-            if file != benchmark_file and file in pivot_df.columns:
-                errors = pivot_df[file] - pivot_df[benchmark_file]
-                fig.add_trace(
-                    go.Histogram(
-                        x=errors,
-                        name=f"{file} - {benchmark_file} (ref)",
-                        opacity=0.7,
-                        nbinsx=30,
-                    )
-                )
-    else:
-        # Default: all pairwise comparisons (first file is implicit reference)
-        for i, file1 in enumerate(files):
-            for file2 in files[i + 1 :]:
-                if file1 in pivot_df.columns and file2 in pivot_df.columns:
-                    errors = pivot_df[file2] - pivot_df[file1]
-                    ref_indicator = " (ref)" if i == 0 else ""
-                    fig.add_trace(
-                        go.Histogram(
-                            x=errors,
-                            name=f"{file2} - {file1}{ref_indicator}",
-                            opacity=0.7,
-                            nbinsx=30,
-                        )
-                    )
-
-    title_suffix = (
-        f" (vs {benchmark_file})" if benchmark_file else " (first file as reference)"
+    # Add histogram of errors
+    fig.add_trace(
+        go.Histogram(
+            x=errors,
+            name="Test - Reference",
+            opacity=0.7,
+            nbinsx=30,
+        )
     )
+
     fig.update_layout(
-        title=f"Error Distribution for {metric}{title_suffix}",
-        xaxis_title="Error (measured - reference)",
+        title=f"Error Distribution for {metric} (Test vs Reference)",
+        xaxis_title="Error (test - reference)",
         yaxis_title="Frequency",
         barmode="overlay",
     )
@@ -320,126 +334,82 @@ def create_error_histogram(
 
 
 def create_bland_altman_plot(
-    combined_df: pd.DataFrame, metric: str, benchmark_file: str = None
+    combined_df: pd.DataFrame, metric: str
 ) -> Union[go.Figure, None]:
     """Create Bland-Altman plot from combined DataFrame."""
     if combined_df is None or combined_df.empty:
         return None
 
-    files = combined_df["file"].unique()
-    if len(files) < 2:
+    if metric not in combined_df.columns:
         return None
 
-    # Pivot to get each file as a column
-    pivot_df = combined_df.pivot_table(
-        index="timestamp", columns="file", values=metric, aggfunc="first"
-    ).dropna()
+    # Get test and reference data
+    test_data = combined_df[combined_df["source"] == "test"][
+        ["timestamp", metric]
+    ].dropna()
+    ref_data = combined_df[combined_df["source"] == "reference"][
+        ["timestamp", metric]
+    ].dropna()
 
-    if pivot_df.empty:
+    # Merge on timestamp to align the data
+    aligned_df = pd.merge(
+        test_data, ref_data, on="timestamp", suffixes=("_test", "_ref")
+    )
+
+    if aligned_df.empty:
         return None
+
+    # Calculate mean and difference for Bland-Altman plot
+    x_vals = (aligned_df[f"{metric}_test"] + aligned_df[f"{metric}_ref"]) / 2  # Mean
+    y_vals = (
+        aligned_df[f"{metric}_test"] - aligned_df[f"{metric}_ref"]
+    )  # Difference (test - reference)
+
+    # Calculate limits of agreement
+    diff_mean = y_vals.mean()
+    diff_std = y_vals.std()
+    upper_loa = diff_mean + 1.96 * diff_std
+    lower_loa = diff_mean - 1.96 * diff_std
 
     fig = go.Figure()
 
-    # If benchmark is specified, compare all others to it
-    if benchmark_file and benchmark_file in files:
-        for file in files:
-            if file != benchmark_file and file in pivot_df.columns:
-                x_vals = pivot_df[[benchmark_file, file]].mean(axis=1)  # Mean
-                y_vals = pivot_df[file] - pivot_df[benchmark_file]  # Difference
-
-                # Calculate limits of agreement
-                diff_mean = y_vals.mean()
-                diff_std = y_vals.std()
-                upper_loa = diff_mean + 1.96 * diff_std
-                lower_loa = diff_mean - 1.96 * diff_std
-
-                # Add scatter plot
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_vals,
-                        y=y_vals,
-                        mode="markers",
-                        name=f"{file} vs {benchmark_file}",
-                        opacity=0.7,
-                    )
-                )
-
-                # Add mean difference line
-                fig.add_hline(
-                    y=diff_mean,
-                    line_dash="dash",
-                    line_color="red",
-                    annotation_text=f"Mean: {diff_mean:.2f}",
-                )
-
-                # Add limits of agreement
-                fig.add_hline(
-                    y=upper_loa,
-                    line_dash="dot",
-                    line_color="orange",
-                    annotation_text=f"+1.96 SD: {upper_loa:.2f}",
-                )
-                fig.add_hline(
-                    y=lower_loa,
-                    line_dash="dot",
-                    line_color="orange",
-                    annotation_text=f"-1.96 SD: {lower_loa:.2f}",
-                )
-    else:
-        # Default: compare all others to first file
-        reference_file = files[0]
-        for file in files[1:]:
-            if file in pivot_df.columns and reference_file in pivot_df.columns:
-                x_vals = pivot_df[[reference_file, file]].mean(axis=1)  # Mean
-                y_vals = pivot_df[file] - pivot_df[reference_file]  # Difference
-
-                # Calculate limits of agreement
-                diff_mean = y_vals.mean()
-                diff_std = y_vals.std()
-                upper_loa = diff_mean + 1.96 * diff_std
-                lower_loa = diff_mean - 1.96 * diff_std
-
-                # Add scatter plot
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_vals,
-                        y=y_vals,
-                        mode="markers",
-                        name=f"{file} vs {reference_file} (ref)",
-                        opacity=0.7,
-                    )
-                )
-
-                # Add mean difference line (only for first comparison to avoid duplicates)
-                if file == files[1]:
-                    fig.add_hline(
-                        y=diff_mean,
-                        line_dash="dash",
-                        line_color="red",
-                        annotation_text=f"Mean: {diff_mean:.2f}",
-                    )
-
-                    # Add limits of agreement
-                    fig.add_hline(
-                        y=upper_loa,
-                        line_dash="dot",
-                        line_color="orange",
-                        annotation_text=f"+1.96 SD: {upper_loa:.2f}",
-                    )
-                    fig.add_hline(
-                        y=lower_loa,
-                        line_dash="dot",
-                        line_color="orange",
-                        annotation_text=f"-1.96 SD: {lower_loa:.2f}",
-                    )
-
-    title_suffix = (
-        f" (vs {benchmark_file})" if benchmark_file else " (vs first file as reference)"
+    # Add scatter plot
+    fig.add_trace(
+        go.Scatter(
+            x=x_vals,
+            y=y_vals,
+            mode="markers",
+            name="Test vs Reference",
+            opacity=0.7,
+        )
     )
+
+    # Add mean difference line
+    fig.add_hline(
+        y=diff_mean,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Mean bias: {diff_mean:.3f}",
+    )
+
+    # Add limits of agreement
+    fig.add_hline(
+        y=upper_loa,
+        line_dash="dot",
+        line_color="orange",
+        annotation_text=f"+1.96 SD: {upper_loa:.3f}",
+    )
+    fig.add_hline(
+        y=lower_loa,
+        line_dash="dot",
+        line_color="orange",
+        annotation_text=f"-1.96 SD: {lower_loa:.3f}",
+    )
+
     fig.update_layout(
-        title=f"Bland-Altman Plot for {metric}{title_suffix}",
-        xaxis_title=f"Mean of {metric}",
-        yaxis_title=f"Difference in {metric} (measured - reference)",
+        title=f"Bland-Altman Plot for {metric} (Test vs Reference)",
+        xaxis_title=f"Mean of Test and Reference {metric}",
+        yaxis_title=f"Difference (Test - Reference) {metric}",
         showlegend=True,
     )
 
@@ -449,137 +419,81 @@ def create_bland_altman_plot(
 def create_rolling_error_plot(
     combined_df: pd.DataFrame,
     metric: str,
-    benchmark_file: str = None,
     window_size: int = 50,
 ) -> Union[go.Figure, None]:
     """Create rolling error / time-varying bias plot from combined DataFrame."""
     if combined_df is None or combined_df.empty:
         return None
 
-    files = combined_df["file"].unique()
-    if len(files) < 2:
+    if metric not in combined_df.columns:
         return None
 
-    # Pivot to get each file as a column
-    pivot_df = combined_df.pivot_table(
-        index="timestamp", columns="file", values=metric, aggfunc="first"
-    ).dropna()
+    # Get test and reference data
+    test_data = combined_df[combined_df["source"] == "test"][
+        ["timestamp", metric]
+    ].dropna()
+    ref_data = combined_df[combined_df["source"] == "reference"][
+        ["timestamp", metric]
+    ].dropna()
 
-    if pivot_df.empty:
+    # Merge on timestamp to align the data
+    aligned_df = pd.merge(
+        test_data, ref_data, on="timestamp", suffixes=("_test", "_ref")
+    )
+
+    if aligned_df.empty:
         return None
 
-    # Sort by timestamp to ensure proper rolling calculation
-    pivot_df = pivot_df.sort_index()
+    # Sort by timestamp
+    aligned_df = aligned_df.sort_values("timestamp")
+
+    # Calculate differences (test - reference)
+    differences = aligned_df[f"{metric}_test"] - aligned_df[f"{metric}_ref"]
+
+    # Calculate rolling statistics
+    rolling_mean = differences.rolling(window=window_size, center=True).mean()
+    rolling_std = differences.rolling(window=window_size, center=True).std()
 
     fig = go.Figure()
 
-    # If benchmark is specified, compare all others to it
-    if benchmark_file and benchmark_file in files:
-        for file in files:
-            if file != benchmark_file and file in pivot_df.columns:
-                # Calculate differences
-                differences = pivot_df[file] - pivot_df[benchmark_file]
+    # Add rolling mean line
+    fig.add_trace(
+        go.Scatter(
+            x=aligned_df["timestamp"],
+            y=rolling_mean,
+            mode="lines",
+            name=f"Rolling mean error (window={window_size})",
+            line=dict(width=2, color="blue"),
+        )
+    )
 
-                # Calculate rolling mean and std
-                rolling_mean = differences.rolling(
-                    window=window_size, center=True
-                ).mean()
-                rolling_std = differences.rolling(window=window_size, center=True).std()
+    # Add rolling confidence bands
+    upper_band = rolling_mean + 1.96 * rolling_std
+    lower_band = rolling_mean - 1.96 * rolling_std
 
-                # Add rolling mean line
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=rolling_mean,
-                        mode="lines",
-                        name=f"{file} - {benchmark_file} (rolling mean)",
-                        line=dict(width=2),
-                    )
-                )
+    fig.add_trace(
+        go.Scatter(
+            x=aligned_df["timestamp"],
+            y=upper_band,
+            mode="lines",
+            name="Upper 95% CI",
+            line=dict(width=1, color="lightblue", dash="dot"),
+            showlegend=False,
+        )
+    )
 
-                # Add confidence bands (±1 std)
-                upper_band = rolling_mean + rolling_std
-                lower_band = rolling_mean - rolling_std
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=upper_band,
-                        mode="lines",
-                        line=dict(width=0),
-                        showlegend=False,
-                        hoverinfo="skip",
-                    )
-                )
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=lower_band,
-                        mode="lines",
-                        line=dict(width=0),
-                        fill="tonexty",
-                        fillcolor=f"rgba(0,100,80,0.2)",
-                        name=f"{file} ±1σ band",
-                        hoverinfo="skip",
-                    )
-                )
-    else:
-        # Default: compare all others to first file
-        reference_file = files[0]
-        colors = ["blue", "red", "green", "orange", "purple"]
-
-        for i, file in enumerate(files[1:]):
-            if file in pivot_df.columns and reference_file in pivot_df.columns:
-                # Calculate differences
-                differences = pivot_df[file] - pivot_df[reference_file]
-
-                # Calculate rolling mean and std
-                rolling_mean = differences.rolling(
-                    window=window_size, center=True
-                ).mean()
-                rolling_std = differences.rolling(window=window_size, center=True).std()
-
-                color = colors[i % len(colors)]
-
-                # Add rolling mean line
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=rolling_mean,
-                        mode="lines",
-                        name=f"{file} - {reference_file} (ref)",
-                        line=dict(width=2, color=color),
-                    )
-                )
-
-                # Add confidence bands (±1 std)
-                upper_band = rolling_mean + rolling_std
-                lower_band = rolling_mean - rolling_std
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=upper_band,
-                        mode="lines",
-                        line=dict(width=0),
-                        showlegend=False,
-                        hoverinfo="skip",
-                    )
-                )
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=pivot_df.index,
-                        y=lower_band,
-                        mode="lines",
-                        line=dict(width=0),
-                        fill="tonexty",
-                        fillcolor=f"rgba({i*50},{100-i*20},{80+i*30},0.2)",
-                        name=f"{file} ±1σ band",
-                        hoverinfo="skip",
-                    )
-                )
+    fig.add_trace(
+        go.Scatter(
+            x=aligned_df["timestamp"],
+            y=lower_band,
+            mode="lines",
+            name="Lower 95% CI",
+            line=dict(width=1, color="lightblue", dash="dot"),
+            fill="tonexty",
+            fillcolor="rgba(173, 216, 230, 0.2)",
+            showlegend=True,
+        )
+    )
 
     # Add horizontal line at zero for reference
     fig.add_hline(
@@ -590,11 +504,8 @@ def create_rolling_error_plot(
         annotation_text="Zero bias",
     )
 
-    title_suffix = (
-        f" (vs {benchmark_file})" if benchmark_file else " (vs first file as reference)"
-    )
     fig.update_layout(
-        title=f"Rolling Error / Time-Varying Bias for {metric}{title_suffix}",
+        title=f"Rolling Error / Time-Varying Bias for {metric} (Test vs Reference)",
         xaxis_title="Time",
         yaxis_title=f"Rolling Error in {metric} (window={window_size})",
         showlegend=True,
