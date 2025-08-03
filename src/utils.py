@@ -619,38 +619,56 @@ def get_file_information(
 
 
 def get_raw_data_sample(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str, sample_size: int = 100
+    test_data: pd.DataFrame,
+    ref_data: pd.DataFrame,
+    sample_size: int = 100,
+    selected_filenames: list = None,
 ) -> Union[pd.DataFrame, None]:
-    """Get a sample of raw aligned data for inspection."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
-        return None
+    """Get a sample of raw data for inspection, optionally filtered by selected files."""
+    # Combine both test and reference data
+    combined_data = pd.concat([test_data, ref_data], ignore_index=True)
+
+    # Filter data by selected filenames if provided
+    if selected_filenames:
+        combined_data = combined_data[
+            combined_data["filename"].isin(selected_filenames)
+        ]
+
+    # If no data remains after filtering, return empty DataFrame
+    if combined_data.empty:
+        return pd.DataFrame()
 
     # Sort by timestamp and take a sample
-    aligned_df = aligned_df.sort_values("timestamp")
+    combined_data = combined_data.sort_values("timestamp")
 
     # Take evenly spaced samples if data is large
-    if len(aligned_df) > sample_size:
-        step = len(aligned_df) // sample_size
-        sample_df = aligned_df.iloc[::step][:sample_size]
+    if len(combined_data) > sample_size:
+        step = len(combined_data) // sample_size
+        sample_df = combined_data.iloc[::step][:sample_size]
     else:
-        sample_df = aligned_df
+        sample_df = combined_data.copy()
 
-    # Reorder columns for better readability
-    columns_order = [
-        "timestamp",
-        "elapsed_seconds_test",
-        "elapsed_seconds_ref",
-        f"{metric}_test",
-        f"{metric}_ref",
-    ]
+    # Remove empty columns more thoroughly
+    columns_to_drop = []
 
-    # Only include columns that exist
-    available_columns = [col for col in columns_order if col in sample_df.columns]
-    sample_df = sample_df[available_columns].copy()
+    for col in sample_df.columns:
+        if sample_df[col].dtype == "object":
+            # For object columns, check if all values are empty/whitespace after dropping NaN
+            non_na_values = sample_df[col].dropna()
+            if non_na_values.empty:
+                columns_to_drop.append(col)
+                continue
+            # Convert to string and check for empty/whitespace
+            str_values = non_na_values.astype(str).str.strip()
+            if str_values.empty or (str_values == "").all():
+                columns_to_drop.append(col)
+        else:
+            # For numeric columns, check if all values are NaN
+            if sample_df[col].isna().all():
+                columns_to_drop.append(col)
 
-    # Add difference column
-    sample_df["difference"] = sample_df[f"{metric}_test"] - sample_df[f"{metric}_ref"]
+    # Drop all identified empty columns at once
+    sample_df = sample_df.drop(columns=columns_to_drop)
 
     # Round numeric values for better display
     numeric_columns = sample_df.select_dtypes(include=[np.number]).columns

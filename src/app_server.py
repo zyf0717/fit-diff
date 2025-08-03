@@ -4,6 +4,7 @@ from typing import List
 import pandas as pd
 import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive, render, ui
+from shiny.render import DataGrid
 from shiny.types import FileInfo
 from shinywidgets import output_widget, render_widget
 
@@ -449,22 +450,44 @@ def server(input: Inputs, output: Outputs, session: Session):
         ):
             return pd.DataFrame()
         test_data, ref_data = fit_data
-        return get_file_information(test_data, ref_data)
+        result = get_file_information(test_data, ref_data)
+        if result is not None:
+            return render.DataTable(result, selection_mode="rows")
+        return pd.DataFrame()
 
     @render.data_frame
     def rawDataTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        # Use raw data instead of prepared/filtered data
+        fit_data = _all_fit_data()
+        if not fit_data or (
+            isinstance(fit_data, tuple) and (fit_data[0].empty or fit_data[1].empty)
+        ):
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
+
+        test_data, ref_data = fit_data
+
         sample_size = (
             input.raw_data_sample_size()
             if hasattr(input, "raw_data_sample_size")
             else 100
         )
-        return get_raw_data_sample(test_data, ref_data, metric, sample_size)
+
+        # Get selected rows from file information table
+        selected_filenames = None
+        try:
+            # Check if fileInfoTable has selections
+            file_info_selection = input.fileInfoTable_selected_rows()
+            if file_info_selection:
+                # Get the file information data to extract filenames
+                file_info_df = get_file_information(test_data, ref_data)
+                if file_info_df is not None and not file_info_df.empty:
+                    # Extract filenames from selected rows (0-indexed)
+                    selected_rows = [int(i) for i in file_info_selection]
+                    selected_filenames = file_info_df.iloc[selected_rows][
+                        "filename"
+                    ].tolist()
+        except (AttributeError, KeyError, IndexError):
+            # If no selection or error accessing selection, show all files
+            selected_filenames = None
+
+        return get_raw_data_sample(test_data, ref_data, sample_size, selected_filenames)
