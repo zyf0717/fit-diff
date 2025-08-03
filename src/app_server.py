@@ -13,10 +13,11 @@ from src.utils import (
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
-    get_error_metrics,
+    get_bias_agreement_stats,
+    get_correlation_stats,
+    get_error_magnitude_stats,
     get_file_information,
     get_raw_data_sample,
-    get_significance_stats,
     prepare_data_for_analysis,
     process_fit,
 )
@@ -57,14 +58,18 @@ def server(input: Inputs, output: Outputs, session: Session):
             ),
             ui.layout_columns(
                 ui.card(
-                    ui.card_header("Error Metrics & Bias"),
-                    ui.output_data_frame("errorMetricsTable"),
+                    ui.card_header("Bias & Agreement"),
+                    ui.output_data_frame("biasAgreementTable"),
                 ),
                 ui.card(
-                    ui.card_header("Statistical Significance"),
-                    ui.output_data_frame("significanceTable"),
+                    ui.card_header("Error Magnitude"),
+                    ui.output_data_frame("errorMagnitudeTable"),
                 ),
-                col_widths=[6, 6],
+                ui.card(
+                    ui.card_header("Correlation"),
+                    ui.output_data_frame("correlationTable"),
+                ),
+                col_widths=[4, 4, 4],
             ),
             ui.card(
                 ui.card_header("Error Distribution Histogram"),
@@ -372,20 +377,28 @@ def server(input: Inputs, output: Outputs, session: Session):
         return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
-    def errorMetricsTable():
+    def biasAgreementTable():
         prepared_data = _get_prepared_data()
         if prepared_data is None:
             return pd.DataFrame()
         test_data, ref_data = prepared_data
-        return get_error_metrics(test_data, ref_data, input.comparison_metric())
+        return get_bias_agreement_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
-    def significanceTable():
+    def errorMagnitudeTable():
         prepared_data = _get_prepared_data()
         if prepared_data is None:
             return pd.DataFrame()
         test_data, ref_data = prepared_data
-        return get_significance_stats(test_data, ref_data, input.comparison_metric())
+        return get_error_magnitude_stats(test_data, ref_data, input.comparison_metric())
+
+    @render.data_frame
+    def correlationTable():
+        prepared_data = _get_prepared_data()
+        if prepared_data is None:
+            return pd.DataFrame()
+        test_data, ref_data = prepared_data
+        return get_correlation_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def fileInfoTable():

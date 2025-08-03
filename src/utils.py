@@ -272,50 +272,10 @@ def calculate_basic_stats(
     return stats_df.round(2)
 
 
-def get_error_metrics(
+def get_bias_agreement_stats(
     test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
-    """Get error metrics and bias statistics in a transposed format."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
-        return None
-
-    test_aligned = aligned_df[f"{metric}_test"]
-    ref_aligned = aligned_df[f"{metric}_ref"]
-    errors = test_aligned - ref_aligned
-
-    # Calculate error metrics
-    mae = errors.abs().mean()
-    mse = (errors**2).mean()
-    rmse = mse**0.5
-    bias = errors.mean()
-    std_errors = errors.std()
-    loa_upper = bias + 1.96 * std_errors
-    loa_lower = bias - 1.96 * std_errors
-    correlation = test_aligned.corr(ref_aligned)
-
-    # Create transposed dataframe
-    error_metrics = {
-        "Mean Absolute Error (MAE)": round(mae, 3),
-        "Mean Squared Error (MSE)": round(mse, 3),
-        "Root Mean Squared Error (RMSE)": round(rmse, 3),
-        "Bias (Mean Difference)": round(bias, 3),
-        "Standard Deviation of Errors": round(std_errors, 3),
-        "Upper Limit of Agreement": round(loa_upper, 3),
-        "Lower Limit of Agreement": round(loa_lower, 3),
-        "Correlation Coefficient": round(correlation, 3),
-        "Number of Data Points": len(aligned_df),
-    }
-
-    # Convert to transposed DataFrame
-    df = pd.DataFrame(list(error_metrics.items()), columns=["Metric", "Value"])
-    return df
-
-
-def get_significance_stats(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
-) -> Union[pd.DataFrame, None]:
-    """Get statistical significance testing results in a transposed format."""
+    """Get bias and agreement statistics."""
     aligned_df = get_aligned_data(test_data, ref_data, metric)
     if aligned_df is None:
         return None
@@ -325,34 +285,89 @@ def get_significance_stats(
     errors = test_aligned - ref_aligned
     n_points = len(aligned_df)
 
-    # Statistical tests
-    t_stat, p_value = stats.ttest_1samp(errors, 0)
+    # Calculate bias and agreement metrics
     bias = errors.mean()
     std_errors = errors.std()
+    loa_upper = bias + 1.96 * std_errors
+    loa_lower = bias - 1.96 * std_errors
+
+    # Statistical tests for bias
+    t_stat, p_value = stats.ttest_1samp(errors, 0)
     cohens_d = bias / std_errors if std_errors > 0 else np.nan
-    _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
 
     # 95% Confidence interval for bias
     confidence_interval = stats.t.interval(
         0.95, n_points - 1, loc=bias, scale=stats.sem(errors)
     )
 
-    # Create transposed dataframe
-    significance_stats = {
-        "T-statistic": round(t_stat, 3),
-        "P-value (Bias ≠ 0)": round(p_value, 4),
-        "Statistically Significant?": "Yes" if p_value < 0.05 else "No",
-        "Effect Size (Cohen's d)": (
-            round(cohens_d, 3) if not np.isnan(cohens_d) else "N/A"
-        ),
-        "Bias 95% CI Lower": round(confidence_interval[0], 3),
-        "Bias 95% CI Upper": round(confidence_interval[1], 3),
-        "Correlation P-value": round(r_p_value, 4),
-        "Correlation Significant?": "Yes" if r_p_value < 0.05 else "No",
+    bias_agreement_stats = {
+        "Mean Bias": round(bias, 6),
+        "95% CI Lower": round(confidence_interval[0], 6),
+        "95% CI Upper": round(confidence_interval[1], 6),
+        "T-statistic": round(t_stat, 6),
+        "P-value": round(p_value, 8),
+        "Cohen's d": round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A",
+        "LoA Upper": round(loa_upper, 6),
+        "LoA Lower": round(loa_lower, 6),
     }
 
     # Convert to transposed DataFrame
-    df = pd.DataFrame(list(significance_stats.items()), columns=["Test", "Result"])
+    df = pd.DataFrame(list(bias_agreement_stats.items()), columns=["Metric", "Value"])
+    return df
+
+
+def get_error_magnitude_stats(
+    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+) -> Union[pd.DataFrame, None]:
+    """Get error magnitude statistics."""
+    aligned_df = get_aligned_data(test_data, ref_data, metric)
+    if aligned_df is None:
+        return None
+
+    test_aligned = aligned_df[f"{metric}_test"]
+    ref_aligned = aligned_df[f"{metric}_ref"]
+    errors = test_aligned - ref_aligned
+
+    # Calculate error magnitude metrics
+    mae = errors.abs().mean()
+    mse = (errors**2).mean()
+    rmse = mse**0.5
+    std_errors = errors.std()
+
+    error_magnitude_stats = {
+        "MAE": round(mae, 6),
+        "RMSE": round(rmse, 6),
+        "MSE": round(mse, 6),
+        "Std of Errors": round(std_errors, 6),
+    }
+
+    # Convert to transposed DataFrame
+    df = pd.DataFrame(list(error_magnitude_stats.items()), columns=["Metric", "Value"])
+    return df
+
+
+def get_correlation_stats(
+    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+) -> Union[pd.DataFrame, None]:
+    """Get correlation statistics."""
+    aligned_df = get_aligned_data(test_data, ref_data, metric)
+    if aligned_df is None:
+        return None
+
+    test_aligned = aligned_df[f"{metric}_test"]
+    ref_aligned = aligned_df[f"{metric}_ref"]
+
+    # Calculate correlation metrics
+    correlation = test_aligned.corr(ref_aligned)
+    _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
+
+    correlation_stats = {
+        "Correlation Coefficient": round(correlation, 6),
+        "Correlation P-value": round(r_p_value, 8),
+    }
+
+    # Convert to transposed DataFrame
+    df = pd.DataFrame(list(correlation_stats.items()), columns=["Metric", "Value"])
     return df
 
 
