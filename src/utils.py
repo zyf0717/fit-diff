@@ -37,12 +37,12 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if "position_lat" in record_df.columns and "position_long" in record_df.columns:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
-    record_df["filename"] = Path(file_path).name
+    record_df["filename"] = str(Path(file_path).name)
 
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-    session_df["filename"] = Path(file_path).name
+    session_df["filename"] = str(Path(file_path).name)
 
     return session_df, record_df
 
@@ -67,6 +67,10 @@ def prepare_data_for_analysis(
     # Filter to required columns
     test_data_df = test_data_df[required_cols].copy()
     ref_data_df = ref_data_df[required_cols].copy()
+
+    # Ensure filename is string type
+    test_data_df["filename"] = test_data_df["filename"].astype(str)
+    ref_data_df["filename"] = ref_data_df["filename"].astype(str)
 
     # Find common timestamps between test and reference data
     test_timestamps = set(test_data_df["timestamp"])
@@ -268,8 +272,18 @@ def calculate_basic_stats(
     if not stats_list:
         return None
 
-    stats_df = pd.DataFrame(stats_list)
-    return stats_df.round(2)
+    df = pd.DataFrame(stats_list).round(2)
+
+    # Set 'device' as columns, 'stat' as index
+    df_pivot = df.set_index("device").T
+    df_pivot = df_pivot.reset_index().rename(columns={"index": "stat"})
+    # Ensure columns are in order: stat, test, reference
+    cols = ["stat"]
+    for dev in ["test", "reference"]:
+        if dev in df_pivot.columns:
+            cols.append(dev)
+    df_pivot = df_pivot[cols]
+    return df_pivot
 
 
 def get_bias_agreement_stats(
@@ -463,7 +477,7 @@ def create_bland_altman_plot(
         # title=f"Bland-Altman Plot for {metric} (Test vs Reference)",
         xaxis_title=f"Mean of Test and Reference {metric}",
         yaxis_title=f"Difference (Test - Reference) {metric}",
-        showlegend=True,
+        showlegend=False,
     )
 
     return fig
@@ -510,27 +524,26 @@ def create_rolling_error_plot(
     fig.add_trace(
         go.Scatter(
             x=aligned_df["elapsed_seconds_test"],
-            y=upper_band,
+            y=lower_band,
             mode="lines",
-            name="Upper 95% CI",
-            line=dict(width=1, color="lightblue", dash="dot"),
-            showlegend=False,
+            name="Lower 95% CI",
+            line=dict(width=2, color="#1E90FF", dash="dot"),  # DodgerBlue, thicker
+            showlegend=True,
         )
     )
 
     fig.add_trace(
         go.Scatter(
             x=aligned_df["elapsed_seconds_test"],
-            y=lower_band,
+            y=upper_band,
             mode="lines",
-            name="Lower 95% CI",
-            line=dict(width=1, color="lightblue", dash="dot"),
+            name="Upper 95% CI",
+            line=dict(width=2, color="#1E90FF", dash="dot"),  # DodgerBlue, thicker
             fill="tonexty",
-            fillcolor="rgba(173, 216, 230, 0.2)",
+            fillcolor="rgba(30, 144, 255, 0.35)",  # More saturated blue, less transparent
             showlegend=True,
         )
     )
-
     # Add horizontal line at zero for reference
     fig.add_hline(
         y=0,
@@ -555,96 +568,53 @@ def get_file_information(
     test_data: pd.DataFrame, ref_data: pd.DataFrame
 ) -> Union[pd.DataFrame, None]:
     """Get file information for test and reference data showing raw data before filtering."""
-    # Get the original data before any filtering by accessing the _all_fit_data directly
-    # For now, we'll work with the current data but show all available info
     if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
         return None
 
-    file_info_list = []
-
-    # Process test data files
-    for filename in test_data["filename"].unique():
-        file_subset = test_data[test_data["filename"] == filename]
-        if not file_subset.empty and "timestamp" in file_subset.columns:
-            # Get all available metrics (not just the selected one)
-            all_metrics = [
-                col
-                for col in file_subset.columns
-                if col not in ["timestamp", "filename", "elapsed_seconds"]
-                and file_subset[col].notna().any()
-            ]
-
-            file_info = {
-                "filename": filename,
-                "device_type": "test",
-                "records_after_alignment": len(file_subset),
-                "start_time": file_subset["timestamp"].min(),
-                "end_time": file_subset["timestamp"].max(),
-                "duration_minutes": round(
-                    (
-                        file_subset["timestamp"].max() - file_subset["timestamp"].min()
-                    ).total_seconds()
-                    / 60,
-                    1,
-                ),
-                "sampling_rate_hz": round(
-                    len(file_subset)
-                    / (
+    def extract_file_info(df, device_type):
+        info_list = []
+        for filename in df["filename"].unique():
+            file_subset = df[df["filename"] == filename]
+            if not file_subset.empty and "timestamp" in file_subset.columns:
+                all_metrics = [
+                    col
+                    for col in file_subset.columns
+                    if col not in ["timestamp", "filename", "elapsed_seconds"]
+                    and file_subset[col].notna().any()
+                ]
+                file_info = {
+                    "filename": str(filename),
+                    "device_type": device_type,
+                    "records": len(file_subset),
+                    "start_time": file_subset["timestamp"].min(),
+                    "end_time": file_subset["timestamp"].max(),
+                    "duration_minutes": round(
                         (
                             file_subset["timestamp"].max()
                             - file_subset["timestamp"].min()
                         ).total_seconds()
+                        / 60,
+                        1,
                     ),
-                    2,
-                ),
-                "available_metrics": ", ".join(sorted(all_metrics)),
-                "metric_count": len(all_metrics),
-            }
-            file_info_list.append(file_info)
+                    "sampling_rate_hz": None,
+                    "available_metrics": ", ".join(sorted(all_metrics)),
+                    "metric_count": len(all_metrics),
+                }
+                duration_sec = (
+                    file_subset["timestamp"].max() - file_subset["timestamp"].min()
+                ).total_seconds()
+                if duration_sec > 0:
+                    file_info["sampling_rate_hz"] = round(
+                        len(file_subset) / duration_sec, 2
+                    )
+                info_list.append(file_info)
+        return info_list
 
-    # Process reference data files
-    for filename in ref_data["filename"].unique():
-        file_subset = ref_data[ref_data["filename"] == filename]
-        if not file_subset.empty and "timestamp" in file_subset.columns:
-            # Get all available metrics (not just the selected one)
-            all_metrics = [
-                col
-                for col in file_subset.columns
-                if col not in ["timestamp", "filename", "elapsed_seconds"]
-                and file_subset[col].notna().any()
-            ]
-
-            file_info = {
-                "filename": filename,
-                "device_type": "reference",
-                "records_after_alignment": len(file_subset),
-                "start_time": file_subset["timestamp"].min(),
-                "end_time": file_subset["timestamp"].max(),
-                "duration_minutes": round(
-                    (
-                        file_subset["timestamp"].max() - file_subset["timestamp"].min()
-                    ).total_seconds()
-                    / 60,
-                    1,
-                ),
-                "sampling_rate_hz": round(
-                    len(file_subset)
-                    / (
-                        (
-                            file_subset["timestamp"].max()
-                            - file_subset["timestamp"].min()
-                        ).total_seconds()
-                    ),
-                    2,
-                ),
-                "available_metrics": ", ".join(sorted(all_metrics)),
-                "metric_count": len(all_metrics),
-            }
-            file_info_list.append(file_info)
-
+    file_info_list = extract_file_info(test_data, "test") + extract_file_info(
+        ref_data, "reference"
+    )
     if not file_info_list:
         return None
-
     return pd.DataFrame(file_info_list)
 
 

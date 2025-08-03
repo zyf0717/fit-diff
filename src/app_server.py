@@ -2,6 +2,7 @@ import logging
 from typing import List
 
 import pandas as pd
+import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo
 from shinywidgets import output_widget, render_widget
@@ -26,6 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 def server(input: Inputs, output: Outputs, session: Session):
+    # Enable dynamic theme switching
+    shinyswatch.theme_picker_server()
+
+    @reactive.Effect
+    @reactive.event(input.logout)
+    async def _():
+        await session.send_custom_message("logout", {})
+
     @render.ui
     def main_content():
         # Only render main content when at least one file from each type is uploaded
@@ -41,71 +50,87 @@ def server(input: Inputs, output: Outputs, session: Session):
             )
 
         return ui.div(
-            ui.layout_columns(
-                ui.output_ui("testFileSelector"),
-                ui.output_ui("refFileSelector"),
-                ui.output_ui("comparisonMetricSelector"),
-                ui.output_ui("outlierRemovalSelector"),
-                col_widths=[3, 3, 3, 3],
-            ),
-            ui.card(
-                ui.card_header("File Statistics"),
-                ui.output_data_frame("basicStatsTable"),
-            ),
-            ui.card(
-                ui.card_header("Metric Visualization"),
-                output_widget("metricPlot"),
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Bias & Agreement"),
-                    ui.output_data_frame("biasAgreementTable"),
+            # Navigation bar with different panels
+            ui.navset_bar(
+                ui.nav_panel(
+                    "Analysis",
+                    ui.layout_columns(
+                        ui.output_ui("testFileSelector"),
+                        ui.output_ui("refFileSelector"),
+                        ui.output_ui("comparisonMetricSelector"),
+                        ui.output_ui("outlierRemovalSelector"),
+                        col_widths=[3, 3, 3, 3],
+                    ),
+                    ui.layout_columns(
+                        ui.card(
+                            ui.card_header("File Statistics"),
+                            ui.output_data_frame("basicStatsTable"),
+                        ),
+                        ui.card(
+                            ui.card_header("Metric Visualization"),
+                            output_widget("metricPlot"),
+                        ),
+                        col_widths=[3, 9],
+                    ),
+                    ui.layout_columns(
+                        ui.card(
+                            ui.card_header("Bias & Agreement"),
+                            ui.output_data_frame("biasAgreementTable"),
+                        ),
+                        ui.card(
+                            ui.card_header("Error Magnitude"),
+                            ui.output_data_frame("errorMagnitudeTable"),
+                        ),
+                        ui.card(
+                            ui.card_header("Correlation"),
+                            ui.output_data_frame("correlationTable"),
+                        ),
+                        col_widths=[4, 4, 4],
+                    ),
+                    ui.layout_columns(
+                        ui.card(
+                            ui.card_header("Error Distribution Histogram"),
+                            output_widget("errorHistogramPlot"),
+                        ),
+                        ui.card(
+                            ui.card_header("Bland-Altman Plot"),
+                            output_widget("blandAltmanPlot"),
+                        ),
+                        col_widths=[6, 6],
+                    ),
+                    ui.card(
+                        ui.card_header("Rolling Error / Time-Varying Bias"),
+                        ui.input_slider(
+                            "rolling_window_size",
+                            "Rolling window size (data points)",
+                            min=10,
+                            max=200,
+                            value=50,
+                            step=10,
+                        ),
+                        output_widget("rollingErrorPlot"),
+                    ),
                 ),
-                ui.card(
-                    ui.card_header("Error Magnitude"),
-                    ui.output_data_frame("errorMagnitudeTable"),
+                ui.nav_panel(
+                    "Data Info",
+                    ui.card(
+                        ui.card_header("File Information"),
+                        ui.output_data_frame("fileInfoTable"),
+                    ),
+                    ui.card(
+                        ui.card_header("Raw Data Sample"),
+                        ui.input_slider(
+                            "raw_data_sample_size",
+                            "Sample size",
+                            min=50,
+                            max=500,
+                            value=100,
+                            step=50,
+                        ),
+                        ui.output_data_frame("rawDataTable"),
+                    ),
                 ),
-                ui.card(
-                    ui.card_header("Correlation"),
-                    ui.output_data_frame("correlationTable"),
-                ),
-                col_widths=[4, 4, 4],
-            ),
-            ui.card(
-                ui.card_header("Error Distribution Histogram"),
-                output_widget("errorHistogramPlot"),
-            ),
-            ui.card(
-                ui.card_header("Bland-Altman Plot"),
-                output_widget("blandAltmanPlot"),
-            ),
-            ui.card(
-                ui.card_header("Rolling Error / Time-Varying Bias"),
-                ui.input_slider(
-                    "rolling_window_size",
-                    "Rolling window size (data points)",
-                    min=10,
-                    max=200,
-                    value=50,
-                    step=10,
-                ),
-                output_widget("rollingErrorPlot"),
-            ),
-            ui.card(
-                ui.card_header("File Information"),
-                ui.output_data_frame("fileInfoTable"),
-            ),
-            ui.card(
-                ui.card_header("Raw Data Sample"),
-                ui.input_slider(
-                    "raw_data_sample_size",
-                    "Sample size",
-                    min=50,
-                    max=500,
-                    value=100,
-                    step=50,
-                ),
-                ui.output_data_frame("rawDataTable"),
+                title="FIT File Comparison Tool",
             ),
         )
 
@@ -240,12 +265,27 @@ def server(input: Inputs, output: Outputs, session: Session):
     def _all_fit_data():
         test_data = _process_test_device_files()
         ref_data = _process_reference_device_files()
-        all_test_data = [
-            df for _, df in test_data.items() if isinstance(df, pd.DataFrame)
-        ]
-        all_ref_data = [
-            df for _, df in ref_data.items() if isinstance(df, pd.DataFrame)
-        ]
+
+        # Collect DataFrames and ensure filename is preserved
+        all_test_data = []
+        for filename, df in test_data.items():
+            if isinstance(df, pd.DataFrame):
+                # Ensure filename column is correctly set
+                df_copy = df.copy()
+                df_copy["filename"] = str(
+                    filename
+                )  # Use the dictionary key as filename
+                all_test_data.append(df_copy)
+
+        all_ref_data = []
+        for filename, df in ref_data.items():
+            if isinstance(df, pd.DataFrame):
+                # Ensure filename column is correctly set
+                df_copy = df.copy()
+                df_copy["filename"] = str(
+                    filename
+                )  # Use the dictionary key as filename
+                all_ref_data.append(df_copy)
 
         if not all_test_data or not all_ref_data:
             logger.warning(
@@ -402,10 +442,13 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.data_frame
     def fileInfoTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        # Use raw data for file information, not prepared/filtered data
+        fit_data = _all_fit_data()
+        if not fit_data or (
+            isinstance(fit_data, tuple) and (fit_data[0].empty or fit_data[1].empty)
+        ):
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
+        test_data, ref_data = fit_data
         return get_file_information(test_data, ref_data)
 
     @render.data_frame
