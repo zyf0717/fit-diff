@@ -452,7 +452,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         test_data, ref_data = fit_data
         result = get_file_information(test_data, ref_data)
         if result is not None:
-            return render.DataTable(result, selection_mode="rows")
+            return render.DataGrid(result, selection_mode="rows")
         return pd.DataFrame()
 
     @render.data_frame
