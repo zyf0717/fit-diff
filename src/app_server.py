@@ -4,7 +4,6 @@ from typing import List
 import pandas as pd
 import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive, render, ui
-from shiny.render import DataGrid
 from shiny.types import FileInfo
 from shinywidgets import output_widget, render_widget
 
@@ -61,6 +60,17 @@ def server(input: Inputs, output: Outputs, session: Session):
                         ui.output_ui("comparisonMetricSelector"),
                         ui.output_ui("outlierRemovalSelector"),
                         col_widths=[3, 3, 3, 3],
+                    ),
+                    ui.layout_columns(
+                        ui.input_slider(
+                            id="shift_seconds",
+                            label="Shift test data time (seconds)",
+                            min=-15,
+                            max=15,
+                            value=0,
+                            step=1,
+                        ),
+                        col_widths=[3],
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -339,6 +349,13 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None
 
         test_data, ref_data = prepared_data
+
+        # Shift test data time if specified
+        if input.shift_seconds() != 0:
+            test_data["elapsed_seconds"] += input.shift_seconds()
+            test_data["timestamp"] = test_data["timestamp"] + pd.to_timedelta(
+                input.shift_seconds(), unit="s"
+            )
 
         # Apply outlier removal if specified
         if outlier_methods:
