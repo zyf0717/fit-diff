@@ -252,8 +252,8 @@ def get_bias_agreement_stats(
     # Descriptive moments on errors
     bias = errors.mean()
     std_err = errors.std()
-    skewness = stats.skew(errors)
-    kurt = stats.kurtosis(errors, fisher=True)  # Fisher’s definition
+    # skewness = stats.skew(errors)
+    # kurt = stats.kurtosis(errors, fisher=True)  # Fisher’s definition
 
     # Normality test: Shapiro–Wilk
     _, sw_p = stats.shapiro(errors)
@@ -281,17 +281,17 @@ def get_bias_agreement_stats(
 
     # Assemble results
     rows = [
-        ("Count", n_points),
+        # ("Count", n_points),
         ("Mean Bias", round(bias, 6)),
-        ("Skewness", round(skewness, 6)),
-        ("Kurtosis", round(kurt, 6)),
+        # ("Skewness", round(skewness, 6)),
+        # ("Kurtosis", round(kurt, 6)),
         ("Shapiro–Wilk p-value", round(sw_p, 6)),
         (f"{test_name} statistic", round(t_stat, 6)),
         (f"{test_name} p-value", round(p_val, 8)),
-        ("95% CI Lower", round(ci_low, 6)),
-        ("95% CI Upper", round(ci_high, 6)),
-        ("LoA Upper", round(loa_upper, 6)),
-        ("LoA Lower", round(loa_lower, 6)),
+        # ("95% CI Lower", round(ci_low, 6)),
+        # ("95% CI Upper", round(ci_high, 6)),
+        # ("LoA Upper", round(loa_upper, 6)),
+        # ("LoA Lower", round(loa_lower, 6)),
         ("Cohen's d", round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A"),
     ]
 
