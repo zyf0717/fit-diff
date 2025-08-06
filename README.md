@@ -33,19 +33,4 @@ Run the application:
 python fit_diff.py
 ```
 
-Then open your browser to the displayed URL (typically <http://localhost:8001>).
-
-## Testing
-
-Run tests with pytest:
-
-```bash
-pytest tests/
-```
-
-## Contributing
-
-This is a lean implementation. To extend functionality:
-
-1. Extend comparison logic in `DiffAnalyzer`
-2. Add new UI components in `app.py`
+Then open your browser to the displayed URL (default is <http://localhost:8001>); see `fit_diff.py` for details.

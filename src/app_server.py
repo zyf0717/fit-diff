@@ -1,7 +1,6 @@
 import logging
-from typing import List, Union
+from typing import List
 
-import numpy as np
 import pandas as pd
 import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive, render, ui
@@ -55,27 +54,24 @@ def server(input: Inputs, output: Outputs, session: Session):
             ui.navset_bar(
                 ui.nav_panel(
                     "Analysis",
-                    ui.card(
-                        ui.card_header("Settings"),
-                        ui.layout_columns(
-                            ui.output_ui("testFileSelector"),
-                            ui.output_ui("refFileSelector"),
-                            ui.output_ui("comparisonMetricSelector"),
-                            ui.output_ui("outlierRemovalSelector"),
-                            col_widths=[3, 3, 3, 3],
+                    ui.layout_columns(
+                        ui.output_ui("testFileSelector"),
+                        ui.output_ui("refFileSelector"),
+                        ui.output_ui("comparisonMetricSelector"),
+                        ui.output_ui("outlierRemovalSelector"),
+                        col_widths=[3, 3, 3, 3],
+                    ),
+                    ui.layout_columns(
+                        ui.input_slider(
+                            id="shift_seconds",
+                            label="Shift test data (seconds):",
+                            min=-15,
+                            max=15,
+                            value=0,
+                            step=1,
                         ),
-                        ui.layout_columns(
-                            ui.input_slider(
-                                id="shift_seconds",
-                                label="Shift test data (seconds):",
-                                min=-15,
-                                max=15,
-                                value=0,
-                                step=1,
-                            ),
-                            ui.output_ui("analysisWindow"),
-                            col_widths=[3, 6],
-                        ),
+                        ui.output_ui("analysisWindow"),
+                        col_widths=[3, 6],
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -363,11 +359,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         try:
             metric = _get_comparison_metric()
 
-            # Get outlier removal methods
-            outlier_methods = []
-            if hasattr(input, "outlier_removal"):
-                outlier_methods = input.outlier_removal() or []
-
             # Get raw data first
             raw_data = _all_fit_data()
             if not raw_data or len(raw_data) != 2:
@@ -567,21 +558,13 @@ def server(input: Inputs, output: Outputs, session: Session):
             else "heart_rate"
         )
 
-    def _get_validated_data_frame():
-        """Get validated data for data frame functions."""
-        data = _get_validated_data()
-        if not data:
-            return None
-        return data
-
     @render_widget
     def metricPlot():
         def _create_plot():
-            data = _get_validated_data()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return None
-            test_data, ref_data = data
-            return create_metric_plot(test_data, ref_data, _get_comparison_metric())
+            return create_metric_plot(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_create_plot, "metricPlot")
 

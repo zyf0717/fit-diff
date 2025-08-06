@@ -141,60 +141,40 @@ def remove_outliers(
     return df_filtered
 
 
-def apply_outlier_removal(
-    test_data: pd.DataFrame,
-    ref_data: pd.DataFrame,
-    metric: str,
-    outlier_removal_methods: list = None,
-) -> Union[Tuple[pd.DataFrame, pd.DataFrame], None]:
-    """Apply outlier removal to test and reference data."""
-    if not outlier_removal_methods:
-        return test_data, ref_data
-
-    # Apply outlier removal to each dataset separately
-    if metric in test_data.columns:
-        test_data = remove_outliers(test_data, metric, outlier_removal_methods)
-    if metric in ref_data.columns:
-        ref_data = remove_outliers(ref_data, metric, outlier_removal_methods)
-
-    if test_data.empty or ref_data.empty:
-        return None
-
-    return test_data, ref_data
-
-
-def create_metric_plot(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
-) -> Union[go.Figure, None]:
-    """Create line plot from test and reference data for specified metric."""
-    if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
+def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure, None]:
+    """Create line plot from aligned test and reference data for specified metric."""
+    if aligned_df is None or aligned_df.empty:
         return None
 
     fig = go.Figure()
 
-    # Add only mean trend lines (no raw data points)
-    for source_name, source_data in [("test", test_data), ("reference", ref_data)]:
-        if not source_data.empty and metric in source_data.columns:
-            # Calculate mean per second for trend line
-            mean_per_second = (
-                source_data.groupby(source_data["elapsed_seconds"].round())[metric]
-                .mean()
-                .reset_index()
-            )
+    # Add trend lines for both test and reference data
+    for source_name, col_suffix in [("test", "_test"), ("reference", "_ref")]:
+        metric_col = f"{metric}{col_suffix}"
+        elapsed_col = f"elapsed_seconds{col_suffix}"
 
-            if not mean_per_second.empty:
-                fig.add_trace(
-                    go.Scatter(
-                        x=mean_per_second["elapsed_seconds"],
-                        y=mean_per_second[metric],
-                        mode="lines",
-                        name=f"{source_name}",
-                        line=dict(width=2),
-                    )
+        if metric_col in aligned_df.columns and elapsed_col in aligned_df.columns:
+            # Calculate mean per second for trend line
+            temp_df = aligned_df[[elapsed_col, metric_col]].dropna()
+            if not temp_df.empty:
+                mean_per_second = (
+                    temp_df.groupby(temp_df[elapsed_col].round())[metric_col]
+                    .mean()
+                    .reset_index()
                 )
 
+                if not mean_per_second.empty:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=mean_per_second[elapsed_col],
+                            y=mean_per_second[metric_col],
+                            mode="lines",
+                            name=f"{source_name}",
+                            line=dict(width=2),
+                        )
+                    )
+
     fig.update_layout(
-        # title=f"{metric} over Time",
         xaxis_title="Elapsed Time (seconds)",
         yaxis_title=metric,
         hovermode="x unified",
