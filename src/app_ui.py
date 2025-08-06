@@ -12,13 +12,13 @@ app_ui = ui.page_fluid(
                 """
             ),
             ui.input_file(
-                "test_file_upload",
+                "testFileUpload",
                 "Upload test FIT files",
                 multiple=True,
                 accept=[".fit"],
             ),
             ui.input_file(
-                "ref_file_upload",
+                "refFileUpload",
                 "Upload reference FIT files",
                 multiple=True,
                 accept=[".fit"],

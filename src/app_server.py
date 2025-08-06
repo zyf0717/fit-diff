@@ -38,8 +38,8 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.ui
     def main_content():
         # Only render main content when at least one file from each type is uploaded
-        test_files = input.test_file_upload()
-        ref_files = input.ref_file_upload()
+        test_files = input.testFileUpload()
+        ref_files = input.refFileUpload()
 
         if not test_files or not ref_files:
             return ui.div(
@@ -54,23 +54,27 @@ def server(input: Inputs, output: Outputs, session: Session):
             ui.navset_bar(
                 ui.nav_panel(
                     "Analysis",
-                    ui.layout_columns(
-                        ui.output_ui("testFileSelector"),
-                        ui.output_ui("refFileSelector"),
-                        ui.output_ui("comparisonMetricSelector"),
-                        ui.output_ui("outlierRemovalSelector"),
-                        col_widths=[3, 3, 3, 3],
-                    ),
-                    ui.layout_columns(
-                        ui.input_slider(
-                            id="shift_seconds",
-                            label="Shift test data time (seconds)",
-                            min=-15,
-                            max=15,
-                            value=0,
-                            step=1,
+                    ui.card(
+                        ui.card_header("Settings"),
+                        ui.layout_columns(
+                            ui.output_ui("testFileSelector"),
+                            ui.output_ui("refFileSelector"),
+                            ui.output_ui("comparisonMetricSelector"),
+                            ui.output_ui("outlierRemovalSelector"),
+                            col_widths=[3, 3, 3, 3],
                         ),
-                        col_widths=[3],
+                        ui.layout_columns(
+                            ui.input_slider(
+                                id="shift_seconds",
+                                label="Shift test data (seconds):",
+                                min=-15,
+                                max=15,
+                                value=0,
+                                step=1,
+                            ),
+                            ui.output_ui("analysisWindow"),
+                            col_widths=[3, 6],
+                        ),
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -147,7 +151,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.ui
     def testFileSelector():
-        test_files = input.test_file_upload()
+        test_files = input.testFileUpload()
         if not test_files:
             return None
 
@@ -164,7 +168,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.ui
     def refFileSelector():
-        ref_files = input.ref_file_upload()
+        ref_files = input.refFileUpload()
         if not ref_files:
             return None
 
@@ -204,9 +208,38 @@ def server(input: Inputs, output: Outputs, session: Session):
             multiple=True,
         )
 
+    @render.ui
+    def analysisWindow():
+        try:
+            range_info = _get_elapsed_seconds_range()
+            if not range_info:
+                return None
+            return ui.layout_columns(
+                ui.input_numeric(
+                    id="analysis_window_start",
+                    label="Analysis window start (elapsed seconds):",
+                    value=range_info.get("min", 0),
+                    min=range_info.get("min", 0),
+                    max=range_info.get("max", 60),
+                    step=1,
+                ),
+                ui.input_numeric(
+                    id="analysis_window_end",
+                    label="Analysis window end (elapsed seconds):",
+                    value=range_info.get("max", 60),
+                    min=range_info.get("min", 0),
+                    max=range_info.get("max", 60),
+                    step=1,
+                ),
+                col_widths=[6, 6],
+            )
+        except Exception as e:
+            logger.error(f"Error in analysisWindow: {e}")
+            return None
+
     @reactive.Calc
     def _process_test_device_files():
-        test_files: List[FileInfo] = input.test_file_upload()
+        test_files: List[FileInfo] = input.testFileUpload()
         if not test_files:
             return {}
 
@@ -241,7 +274,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @reactive.Calc
     def _process_reference_device_files():
-        ref_files: List[FileInfo] = input.ref_file_upload()
+        ref_files: List[FileInfo] = input.refFileUpload()
         if not ref_files:
             return {}
 
@@ -332,131 +365,277 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @reactive.Calc
     def _get_prepared_data():
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
-
-        # Get outlier removal methods
-        outlier_methods = []
-        if hasattr(input, "outlier_removal"):
-            outlier_methods = input.outlier_removal() or []
-
-        # Prepare data for analysis
-        prepared_data = prepare_data_for_analysis(_all_fit_data(), metric)
-        if prepared_data is None:
-            return None
-
-        test_data, ref_data = prepared_data
-
-        # Shift test data time if specified
-        if input.shift_seconds() != 0:
-            test_data["elapsed_seconds"] += input.shift_seconds()
-            test_data["timestamp"] = test_data["timestamp"] + pd.to_timedelta(
-                input.shift_seconds(), unit="s"
+        try:
+            metric = (
+                input.comparison_metric()
+                if hasattr(input, "comparison_metric")
+                else "heart_rate"
             )
 
-        # Apply outlier removal if specified
-        if outlier_methods:
-            result = apply_outlier_removal(test_data, ref_data, metric, outlier_methods)
-            if result is None:
-                return None
-            test_data, ref_data = result
+            # Get outlier removal methods
+            outlier_methods = []
+            if hasattr(input, "outlier_removal"):
+                outlier_methods = input.outlier_removal() or []
 
-        return test_data, ref_data
+            # Get raw data first
+            raw_data = _all_fit_data()
+            if not raw_data or len(raw_data) != 2:
+                return pd.DataFrame(), pd.DataFrame()
+
+            test_raw, ref_raw = raw_data
+            if test_raw.empty or ref_raw.empty:
+                return pd.DataFrame(), pd.DataFrame()
+
+            # Prepare data for analysis
+            prepared_data = prepare_data_for_analysis((test_raw, ref_raw), metric)
+            if prepared_data is None:
+                return pd.DataFrame(), pd.DataFrame()
+
+            test_data, ref_data = prepared_data
+
+            # Shift test data time if specified
+            if input.shift_seconds() != 0:
+                test_data["elapsed_seconds"] += input.shift_seconds()
+                test_data["timestamp"] = test_data["timestamp"] + pd.to_timedelta(
+                    input.shift_seconds(), unit="s"
+                )
+
+            # Apply outlier removal if specified
+            if outlier_methods:
+                result = apply_outlier_removal(
+                    test_data, ref_data, metric, outlier_methods
+                )
+                if result is None:
+                    return pd.DataFrame(), pd.DataFrame()
+                test_data, ref_data = result
+
+            return test_data, ref_data
+        except Exception as e:
+            logger.error(f"Error in _get_prepared_data: {e}")
+            return pd.DataFrame(), pd.DataFrame()
+
+    @reactive.Calc
+    def _get_elapsed_seconds_range():
+        try:
+            prepared_data = _get_prepared_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return {"min": 0, "max": 60, "default": (0, 60)}
+
+            test_data_df, ref_data_df = prepared_data
+
+            # Handle empty DataFrames
+            if test_data_df.empty and ref_data_df.empty:
+                return {"min": 0, "max": 60, "default": (0, 60)}
+
+            # Get min/max from both DataFrames, ignoring empty ones, using list comprehensions
+            min_vals = [
+                df["elapsed_seconds"].min()
+                for df in [test_data_df, ref_data_df]
+                if not df.empty and "elapsed_seconds" in df.columns
+            ]
+            max_vals = [
+                df["elapsed_seconds"].max()
+                for df in [test_data_df, ref_data_df]
+                if not df.empty and "elapsed_seconds" in df.columns
+            ]
+            if not min_vals or not max_vals:
+                return {"min": 0, "max": 60, "default": (0, 60)}
+
+            min_value = int(min(min_vals))
+            max_value = int(max(max_vals))
+            default_value = (min_value, max_value)
+            return {"min": min_value, "max": max_value, "default": default_value}
+        except Exception as e:
+            logger.error(f"Error in _get_elapsed_seconds_range: {e}")
+            return {"min": 0, "max": 60, "default": (0, 60)}
+
+    @reactive.Calc
+    def _get_trimmed_data():
+        try:
+            prepared_data = _get_prepared_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return pd.DataFrame(), pd.DataFrame()
+
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return pd.DataFrame(), pd.DataFrame()
+
+            # Get analysis window from numeric inputs
+            start = (
+                input.analysis_window_start()
+                if hasattr(input, "analysis_window_start")
+                else None
+            )
+            end = (
+                input.analysis_window_end()
+                if hasattr(input, "analysis_window_end")
+                else None
+            )
+
+            if start is None or end is None:
+                # If no analysis window is set, return the full data
+                return test_data, ref_data
+
+            # Trim data to the specified window
+            test_data = test_data[
+                (test_data["elapsed_seconds"] >= start)
+                & (test_data["elapsed_seconds"] <= end)
+            ]
+            ref_data = ref_data[
+                (ref_data["elapsed_seconds"] >= start)
+                & (ref_data["elapsed_seconds"] <= end)
+            ]
+
+            return test_data, ref_data
+        except Exception as e:
+            logger.error(f"Error in _get_trimmed_data: {e}")
+            return pd.DataFrame(), pd.DataFrame()
 
     @render_widget
     def metricPlot():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return None
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return None
+            metric = (
+                input.comparison_metric()
+                if hasattr(input, "comparison_metric")
+                else "heart_rate"
+            )
+            return create_metric_plot(test_data, ref_data, metric)
+        except Exception as e:
+            logger.error(f"Error in metricPlot: {e}")
             return None
-        test_data, ref_data = prepared_data
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
-        return create_metric_plot(test_data, ref_data, metric)
 
     @render_widget
     def errorHistogramPlot():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
-            return None
-        test_data, ref_data = prepared_data
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return None
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return None
+            metric = (
+                input.comparison_metric()
+                if hasattr(input, "comparison_metric")
+                else "heart_rate"
+            )
 
-        return create_error_histogram(test_data, ref_data, metric)
+            return create_error_histogram(test_data, ref_data, metric)
+        except Exception as e:
+            logger.error(f"Error in errorHistogramPlot: {e}")
+            return None
 
     @render_widget
     def blandAltmanPlot():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
-            return None
-        test_data, ref_data = prepared_data
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return None
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return None
+            metric = (
+                input.comparison_metric()
+                if hasattr(input, "comparison_metric")
+                else "heart_rate"
+            )
 
-        return create_bland_altman_plot(test_data, ref_data, metric)
+            return create_bland_altman_plot(test_data, ref_data, metric)
+        except Exception as e:
+            logger.error(f"Error in blandAltmanPlot: {e}")
+            return None
 
     @render_widget
     def rollingErrorPlot():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return None
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return None
+            metric = (
+                input.comparison_metric()
+                if hasattr(input, "comparison_metric")
+                else "heart_rate"
+            )
+
+            # Get window size from slider input
+            window_size = (
+                input.rolling_window_size()
+                if hasattr(input, "rolling_window_size")
+                else 50
+            )
+
+            return create_rolling_error_plot(test_data, ref_data, metric, window_size)
+        except Exception as e:
+            logger.error(f"Error in rollingErrorPlot: {e}")
             return None
-        test_data, ref_data = prepared_data
-        metric = (
-            input.comparison_metric()
-            if hasattr(input, "comparison_metric")
-            else "heart_rate"
-        )
-
-        # Get window size from slider input
-        window_size = (
-            input.rolling_window_size() if hasattr(input, "rolling_window_size") else 50
-        )
-
-        return create_rolling_error_plot(test_data, ref_data, metric, window_size)
 
     @render.data_frame
     def basicStatsTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return pd.DataFrame()
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return pd.DataFrame()
+            return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
+        except Exception as e:
+            logger.error(f"Error in basicStatsTable: {e}")
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
-        return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def biasAgreementTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return pd.DataFrame()
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return pd.DataFrame()
+            return get_bias_agreement_stats(
+                test_data, ref_data, input.comparison_metric()
+            )
+        except Exception as e:
+            logger.error(f"Error in biasAgreementTable: {e}")
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
-        return get_bias_agreement_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def errorMagnitudeTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return pd.DataFrame()
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return pd.DataFrame()
+            return get_error_magnitude_stats(
+                test_data, ref_data, input.comparison_metric()
+            )
+        except Exception as e:
+            logger.error(f"Error in errorMagnitudeTable: {e}")
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
-        return get_error_magnitude_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def correlationTable():
-        prepared_data = _get_prepared_data()
-        if prepared_data is None:
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return pd.DataFrame()
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return pd.DataFrame()
+            return get_correlation_stats(test_data, ref_data, input.comparison_metric())
+        except Exception as e:
+            logger.error(f"Error in correlationTable: {e}")
             return pd.DataFrame()
-        test_data, ref_data = prepared_data
-        return get_correlation_stats(test_data, ref_data, input.comparison_metric())
 
     @render.data_frame
     def fileInfoTable():
