@@ -210,7 +210,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.ui
     def analysisWindow():
-        try:
+        def _create_analysis_window():
             range_info = _get_elapsed_seconds_range()
             if not range_info:
                 return None
@@ -233,9 +233,8 @@ def server(input: Inputs, output: Outputs, session: Session):
                 ),
                 col_widths=[6, 6],
             )
-        except Exception as e:
-            logger.error(f"Error in analysisWindow: {e}")
-            return None
+
+        return _safe_execute(_create_analysis_window, "analysisWindow")
 
     @reactive.Calc
     def _process_test_device_files():
@@ -265,9 +264,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 )
             except Exception as e:
                 logger.error(
-                    "Error processing test device file %s: %s",
-                    file_info["name"],
-                    str(e),
+                    f"Error processing test device file {file_info['name']}: {e}"
                 )
                 test_device_data[file_info["name"]] = f"Error: {str(e)}"
         return test_device_data
@@ -298,9 +295,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 ref_device_data[file_info["name"]] = record_df
             except Exception as e:
                 logger.error(
-                    "Error processing reference device file %s: %s",
-                    file_info["name"],
-                    str(e),
+                    f"Error processing reference device file {file_info['name']}: {e}"
                 )
                 ref_device_data[file_info["name"]] = f"Error: {str(e)}"
         return ref_device_data
@@ -491,151 +486,160 @@ def server(input: Inputs, output: Outputs, session: Session):
             logger.error(f"Error in _get_trimmed_data: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
+    # Helper functions for error handling and data validation
+    def _safe_execute(func, func_name, default_return=None):
+        """
+        Execute function safely with consistent error handling.
+
+        Args:
+            func: Function to execute
+            func_name: Name for logging purposes
+            default_return: Default value to return on error
+
+        Returns:
+            Function result or default_return on error
+        """
+        try:
+            return func()
+        except Exception as e:
+            logger.error(f"Error in {func_name}: {e}")
+            return default_return
+
+    def _get_validated_data():
+        """
+        Get validated prepared data or return None if invalid.
+
+        Returns:
+            Tuple of (test_data, ref_data) or None if validation fails
+        """
+        prepared_data = _get_trimmed_data()
+        if not prepared_data or len(prepared_data) != 2:
+            return None
+        test_data, ref_data = prepared_data
+        if test_data.empty or ref_data.empty:
+            return None
+        return test_data, ref_data
+
+    def _get_comparison_metric():
+        """Get comparison metric with fallback to 'heart_rate'."""
+        return (
+            input.comparison_metric()
+            if hasattr(input, "comparison_metric")
+            else "heart_rate"
+        )
+
+    def _get_validated_data_frame():
+        """
+        Get validated data for data frame functions.
+
+        Returns:
+            Tuple of (test_data, ref_data) or None if validation fails
+        """
+        data = _get_validated_data()
+        if not data:
+            return None
+        return data
+
     @render_widget
     def metricPlot():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _create_plot():
+            data = _get_validated_data()
+            if not data:
                 return None
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return None
-            metric = (
-                input.comparison_metric()
-                if hasattr(input, "comparison_metric")
-                else "heart_rate"
-            )
-            return create_metric_plot(test_data, ref_data, metric)
-        except Exception as e:
-            logger.error(f"Error in metricPlot: {e}")
-            return None
+            test_data, ref_data = data
+            return create_metric_plot(test_data, ref_data, _get_comparison_metric())
+
+        return _safe_execute(_create_plot, "metricPlot")
 
     @render_widget
     def errorHistogramPlot():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _create_histogram():
+            data = _get_validated_data()
+            if not data:
                 return None
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return None
-            metric = (
-                input.comparison_metric()
-                if hasattr(input, "comparison_metric")
-                else "heart_rate"
-            )
+            test_data, ref_data = data
+            return create_error_histogram(test_data, ref_data, _get_comparison_metric())
 
-            return create_error_histogram(test_data, ref_data, metric)
-        except Exception as e:
-            logger.error(f"Error in errorHistogramPlot: {e}")
-            return None
+        return _safe_execute(_create_histogram, "errorHistogramPlot")
 
     @render_widget
     def blandAltmanPlot():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _create_bland_altman():
+            data = _get_validated_data()
+            if not data:
                 return None
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return None
-            metric = (
-                input.comparison_metric()
-                if hasattr(input, "comparison_metric")
-                else "heart_rate"
+            test_data, ref_data = data
+            return create_bland_altman_plot(
+                test_data, ref_data, _get_comparison_metric()
             )
 
-            return create_bland_altman_plot(test_data, ref_data, metric)
-        except Exception as e:
-            logger.error(f"Error in blandAltmanPlot: {e}")
-            return None
+        return _safe_execute(_create_bland_altman, "blandAltmanPlot")
 
     @render_widget
     def rollingErrorPlot():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _create_rolling_error():
+            data = _get_validated_data()
+            if not data:
                 return None
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return None
-            metric = (
-                input.comparison_metric()
-                if hasattr(input, "comparison_metric")
-                else "heart_rate"
-            )
-
-            # Get window size from slider input
+            test_data, ref_data = data
             window_size = (
                 input.rolling_window_size()
                 if hasattr(input, "rolling_window_size")
                 else 50
             )
+            return create_rolling_error_plot(
+                test_data, ref_data, _get_comparison_metric(), window_size
+            )
 
-            return create_rolling_error_plot(test_data, ref_data, metric, window_size)
-        except Exception as e:
-            logger.error(f"Error in rollingErrorPlot: {e}")
-            return None
+        return _safe_execute(_create_rolling_error, "rollingErrorPlot")
 
     @render.data_frame
     def basicStatsTable():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _get_stats():
+            data = _get_validated_data_frame()
+            if not data:
                 return pd.DataFrame()
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return pd.DataFrame()
-            return calculate_basic_stats(test_data, ref_data, input.comparison_metric())
-        except Exception as e:
-            logger.error(f"Error in basicStatsTable: {e}")
-            return pd.DataFrame()
+            test_data, ref_data = data
+            return calculate_basic_stats(test_data, ref_data, _get_comparison_metric())
+
+        return _safe_execute(_get_stats, "basicStatsTable", pd.DataFrame())
 
     @render.data_frame
     def biasAgreementTable():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _get_bias_stats():
+            data = _get_validated_data_frame()
+            if not data:
                 return pd.DataFrame()
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return pd.DataFrame()
+            test_data, ref_data = data
             return get_bias_agreement_stats(
-                test_data, ref_data, input.comparison_metric()
+                test_data, ref_data, _get_comparison_metric()
             )
-        except Exception as e:
-            logger.error(f"Error in biasAgreementTable: {e}")
-            return pd.DataFrame()
+
+        return _safe_execute(_get_bias_stats, "biasAgreementTable", pd.DataFrame())
 
     @render.data_frame
     def errorMagnitudeTable():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _get_error_stats():
+            data = _get_validated_data_frame()
+            if not data:
                 return pd.DataFrame()
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return pd.DataFrame()
+            test_data, ref_data = data
             return get_error_magnitude_stats(
-                test_data, ref_data, input.comparison_metric()
+                test_data, ref_data, _get_comparison_metric()
             )
-        except Exception as e:
-            logger.error(f"Error in errorMagnitudeTable: {e}")
-            return pd.DataFrame()
+
+        return _safe_execute(_get_error_stats, "errorMagnitudeTable", pd.DataFrame())
 
     @render.data_frame
     def correlationTable():
-        try:
-            prepared_data = _get_trimmed_data()
-            if not prepared_data or len(prepared_data) != 2:
+        def _get_correlation_stats():
+            data = _get_validated_data_frame()
+            if not data:
                 return pd.DataFrame()
-            test_data, ref_data = prepared_data
-            if test_data.empty or ref_data.empty:
-                return pd.DataFrame()
-            return get_correlation_stats(test_data, ref_data, input.comparison_metric())
-        except Exception as e:
-            logger.error(f"Error in correlationTable: {e}")
-            return pd.DataFrame()
+            test_data, ref_data = data
+            return get_correlation_stats(test_data, ref_data, _get_comparison_metric())
+
+        return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
 
     @render.data_frame
     def fileInfoTable():
