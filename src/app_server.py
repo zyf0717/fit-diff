@@ -1,6 +1,7 @@
 import logging
-from typing import List
+from typing import List, Union
 
+import numpy as np
 import pandas as pd
 import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive, render, ui
@@ -8,7 +9,6 @@ from shiny.types import FileInfo
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
-    apply_outlier_removal,
     calculate_basic_stats,
     create_bland_altman_plot,
     create_error_histogram,
@@ -21,6 +21,7 @@ from src.utils import (
     get_raw_data_sample,
     prepare_data_for_analysis,
     process_fit,
+    remove_outliers,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,7 +200,6 @@ def server(input: Inputs, output: Outputs, session: Session):
             "outlier_removal",
             "Outlier removal:",
             choices={
-                "remove_zeros": "Remove zero values",
                 "remove_iqr": "Remove IQR outliers (1.5 × IQR)",
                 "remove_zscore": "Remove Z-score outliers (|z| > 3)",
                 "remove_percentile": "Remove percentile outliers (< 1% or > 99%)",
@@ -359,7 +359,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         return sorted(list(common_metrics))
 
     @reactive.Calc
-    def _get_prepared_data():
+    def _get_shifted_data():
         try:
             metric = _get_comparison_metric()
 
@@ -391,24 +391,15 @@ def server(input: Inputs, output: Outputs, session: Session):
                     input.shift_seconds(), unit="s"
                 )
 
-            # Apply outlier removal if specified
-            if outlier_methods:
-                result = apply_outlier_removal(
-                    test_data, ref_data, metric, outlier_methods
-                )
-                if result is None:
-                    return pd.DataFrame(), pd.DataFrame()
-                test_data, ref_data = result
-
             return test_data, ref_data
         except Exception as e:
-            logger.error(f"Error in _get_prepared_data: {e}")
+            logger.error(f"Error in _get_shifted_data: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
     @reactive.Calc
     def _get_elapsed_seconds_range():
         try:
-            prepared_data = _get_prepared_data()
+            prepared_data = _get_shifted_data()
             if not prepared_data or len(prepared_data) != 2:
                 return {"min": 0, "max": 60, "default": (0, 60)}
 
@@ -443,7 +434,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.Calc
     def _get_trimmed_data():
         try:
-            prepared_data = _get_prepared_data()
+            prepared_data = _get_shifted_data()
             if not prepared_data or len(prepared_data) != 2:
                 return pd.DataFrame(), pd.DataFrame()
 
@@ -482,6 +473,56 @@ def server(input: Inputs, output: Outputs, session: Session):
             logger.error(f"Error in _get_trimmed_data: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
+    @reactive.Calc
+    def _get_aligned_data_with_outlier_removal():
+        """Get aligned test and reference data with outlier removal applied to differences."""
+        try:
+            prepared_data = _get_trimmed_data()
+            if not prepared_data or len(prepared_data) != 2:
+                return None
+
+            test_data, ref_data = prepared_data
+            if test_data.empty or ref_data.empty:
+                return None
+
+            metric = _get_comparison_metric()
+            if metric not in test_data.columns or metric not in ref_data.columns:
+                return None
+
+            # Get clean data
+            test_clean = test_data[["timestamp", "elapsed_seconds", metric]].dropna()
+            ref_clean = ref_data[["timestamp", "elapsed_seconds", metric]].dropna()
+
+            # Merge on timestamp to align the data properly
+            aligned_df = pd.merge(
+                test_clean, ref_clean, on="timestamp", suffixes=("_test", "_ref")
+            )
+
+            if aligned_df.empty:
+                return None
+
+            # Calculate differences for outlier removal
+            aligned_df["difference"] = (
+                aligned_df[f"{metric}_test"] - aligned_df[f"{metric}_ref"]
+            )
+
+            # Get outlier removal methods
+            outlier_methods = []
+            if hasattr(input, "outlier_removal") and input.outlier_removal():
+                outlier_methods = input.outlier_removal()
+
+            # Apply outlier removal to differences if specified
+            if outlier_methods:
+                aligned_df = remove_outliers(aligned_df, "difference", outlier_methods)
+
+            # Remove the temporary difference column
+            aligned_df = aligned_df.drop(columns=["difference"])
+
+            return aligned_df if not aligned_df.empty else None
+        except Exception as e:
+            logger.error(f"Error in _get_aligned_data_with_outlier_removal: {e}")
+            return None
+
     # Helper functions for error handling and data validation
     def _safe_execute(func, func_name, default_return=None):
         """
@@ -501,13 +542,15 @@ def server(input: Inputs, output: Outputs, session: Session):
             logger.error(f"Error in {func_name}: {e}")
             return default_return
 
-    def _get_validated_data():
-        """
-        Get validated prepared data or return None if invalid.
+    def _get_validated_aligned_data():
+        """Get validated aligned data or return None if invalid."""
+        aligned_data = _get_aligned_data_with_outlier_removal()
+        if aligned_data is None or aligned_data.empty:
+            return None
+        return aligned_data
 
-        Returns:
-            Tuple of (test_data, ref_data) or None if validation fails
-        """
+    def _get_validated_data():
+        """Get validated prepared data or return None if invalid."""
         prepared_data = _get_trimmed_data()
         if not prepared_data or len(prepared_data) != 2:
             return None
@@ -525,12 +568,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         )
 
     def _get_validated_data_frame():
-        """
-        Get validated data for data frame functions.
-
-        Returns:
-            Tuple of (test_data, ref_data) or None if validation fails
-        """
+        """Get validated data for data frame functions."""
         data = _get_validated_data()
         if not data:
             return None
@@ -550,41 +588,36 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render_widget
     def errorHistogramPlot():
         def _create_histogram():
-            data = _get_validated_data()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return None
-            test_data, ref_data = data
-            return create_error_histogram(test_data, ref_data, _get_comparison_metric())
+            return create_error_histogram(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_create_histogram, "errorHistogramPlot")
 
     @render_widget
     def blandAltmanPlot():
         def _create_bland_altman():
-            data = _get_validated_data()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return None
-            test_data, ref_data = data
-            return create_bland_altman_plot(
-                test_data, ref_data, _get_comparison_metric()
-            )
+            return create_bland_altman_plot(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_create_bland_altman, "blandAltmanPlot")
 
     @render_widget
     def rollingErrorPlot():
         def _create_rolling_error():
-            data = _get_validated_data()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return None
-            test_data, ref_data = data
             window_size = (
                 input.rolling_window_size()
                 if hasattr(input, "rolling_window_size")
                 else 50
             )
             return create_rolling_error_plot(
-                test_data, ref_data, _get_comparison_metric(), window_size
+                aligned_data, _get_comparison_metric(), window_size
             )
 
         return _safe_execute(_create_rolling_error, "rollingErrorPlot")
@@ -592,48 +625,40 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.data_frame
     def basicStatsTable():
         def _get_stats():
-            data = _get_validated_data_frame()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return pd.DataFrame()
-            test_data, ref_data = data
-            return calculate_basic_stats(test_data, ref_data, _get_comparison_metric())
+            return calculate_basic_stats(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_get_stats, "basicStatsTable", pd.DataFrame())
 
     @render.data_frame
     def biasAgreementTable():
         def _get_bias_stats():
-            data = _get_validated_data_frame()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return pd.DataFrame()
-            test_data, ref_data = data
-            return get_bias_agreement_stats(
-                test_data, ref_data, _get_comparison_metric()
-            )
+            return get_bias_agreement_stats(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_get_bias_stats, "biasAgreementTable", pd.DataFrame())
 
     @render.data_frame
     def errorMagnitudeTable():
         def _get_error_stats():
-            data = _get_validated_data_frame()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return pd.DataFrame()
-            test_data, ref_data = data
-            return get_error_magnitude_stats(
-                test_data, ref_data, _get_comparison_metric()
-            )
+            return get_error_magnitude_stats(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_get_error_stats, "errorMagnitudeTable", pd.DataFrame())
 
     @render.data_frame
     def correlationTable():
         def _get_correlation_stats():
-            data = _get_validated_data_frame()
-            if not data:
+            aligned_data = _get_validated_aligned_data()
+            if aligned_data is None:
                 return pd.DataFrame()
-            test_data, ref_data = data
-            return get_correlation_stats(test_data, ref_data, _get_comparison_metric())
+            return get_correlation_stats(aligned_data, _get_comparison_metric())
 
         return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
 

@@ -96,28 +96,6 @@ def prepare_data_for_analysis(
     return test_data_df, ref_data_df
 
 
-def get_aligned_data(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
-) -> Union[pd.DataFrame, None]:
-    """Get aligned test and reference data by timestamp."""
-    if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
-        return None
-
-    if metric not in test_data.columns or metric not in ref_data.columns:
-        return None
-
-    # Get clean data
-    test_clean = test_data[["timestamp", "elapsed_seconds", metric]].dropna()
-    ref_clean = ref_data[["timestamp", "elapsed_seconds", metric]].dropna()
-
-    # Merge on timestamp to align the data properly
-    aligned_df = pd.merge(
-        test_clean, ref_clean, on="timestamp", suffixes=("_test", "_ref")
-    )
-
-    return aligned_df if not aligned_df.empty else None
-
-
 def remove_outliers(
     df: pd.DataFrame, metric: str, removal_methods: list
 ) -> pd.DataFrame:
@@ -131,11 +109,7 @@ def remove_outliers(
     df_filtered = df.copy()
 
     for method in removal_methods:
-        if method == "remove_zeros":
-            # Remove rows where the metric is zero
-            df_filtered = df_filtered[df_filtered[metric] != 0]
-
-        elif method == "remove_iqr":
+        if method == "remove_iqr":
             # Remove outliers using IQR method (1.5 × IQR)
             Q1 = df_filtered[metric].quantile(0.25)
             Q3 = df_filtered[metric].quantile(0.75)
@@ -229,12 +203,10 @@ def create_metric_plot(
 
 
 def calculate_basic_stats(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Calculate basic statistics for test and reference data using aligned data."""
-    # Get aligned data to ensure equal counts
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     stats_list = []
@@ -287,55 +259,71 @@ def calculate_basic_stats(
 
 
 def get_bias_agreement_stats(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
-    """Get bias and agreement statistics."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    """Get bias, agreement and normality-aware test selection."""
+    if aligned_df is None or aligned_df.empty:
         return None
 
-    test_aligned = aligned_df[f"{metric}_test"]
-    ref_aligned = aligned_df[f"{metric}_ref"]
-    errors = test_aligned - ref_aligned
-    n_points = len(aligned_df)
+    # Compute errors
+    errors = aligned_df[f"{metric}_test"] - aligned_df[f"{metric}_ref"]
+    n_points = len(errors)
 
-    # Calculate bias and agreement metrics
+    # Descriptive moments on errors
     bias = errors.mean()
-    std_errors = errors.std()
-    loa_upper = bias + 1.96 * std_errors
-    loa_lower = bias - 1.96 * std_errors
+    std_err = errors.std()
+    skewness = stats.skew(errors)
+    kurt = stats.kurtosis(errors, fisher=True)  # Fisher’s definition
 
-    # Statistical tests for bias
-    t_stat, p_value = stats.ttest_1samp(errors, 0)
-    cohens_d = bias / std_errors if std_errors > 0 else np.nan
+    # Normality test: Shapiro–Wilk
+    _, sw_p = stats.shapiro(errors)
 
-    # 95% Confidence interval for bias
-    confidence_interval = stats.t.interval(
-        0.95, n_points - 1, loc=bias, scale=stats.sem(errors)
+    # Select inferential test
+    if sw_p > 0.05:
+        test_name = "Paired t-test"
+        t_stat, p_val = stats.ttest_1samp(errors, 0.0)
+    else:
+        test_name = "Wilcoxon signed-rank"
+        # zero_method='wilcox' drops zero-differences for scipy ≥1.7
+        t_stat, p_val = stats.wilcoxon(errors, zero_method="wilcox")
+
+    # 95% CI for bias
+    ci_low, ci_high = stats.t.interval(
+        0.95, df=n_points - 1, loc=bias, scale=stats.sem(errors)
     )
 
-    bias_agreement_stats = {
-        "Mean Bias": round(bias, 6),
-        "95% CI Lower": round(confidence_interval[0], 6),
-        "95% CI Upper": round(confidence_interval[1], 6),
-        "T-statistic": round(t_stat, 6),
-        "P-value": round(p_value, 8),
-        "Cohen's d": round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A",
-        "LoA Upper": round(loa_upper, 6),
-        "LoA Lower": round(loa_lower, 6),
-    }
+    # Limits of Agreement
+    loa_upper = bias + 1.96 * std_err
+    loa_lower = bias - 1.96 * std_err
 
-    # Convert to transposed DataFrame
-    df = pd.DataFrame(list(bias_agreement_stats.items()), columns=["Metric", "Value"])
+    # Effect size
+    cohens_d = bias / std_err if std_err > 0 else np.nan
+
+    # Assemble results
+    rows = [
+        ("Count", n_points),
+        ("Mean Bias", round(bias, 6)),
+        ("Skewness", round(skewness, 6)),
+        ("Kurtosis", round(kurt, 6)),
+        ("Shapiro–Wilk p-value", round(sw_p, 6)),
+        (f"{test_name} statistic", round(t_stat, 6)),
+        (f"{test_name} p-value", round(p_val, 8)),
+        ("95% CI Lower", round(ci_low, 6)),
+        ("95% CI Upper", round(ci_high, 6)),
+        ("LoA Upper", round(loa_upper, 6)),
+        ("LoA Lower", round(loa_lower, 6)),
+        ("Cohen's d", round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A"),
+    ]
+
+    df = pd.DataFrame(rows, columns=["Metric", "Value"])
     return df
 
 
 def get_error_magnitude_stats(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get error magnitude statistics."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     test_aligned = aligned_df[f"{metric}_test"]
@@ -361,11 +349,10 @@ def get_error_magnitude_stats(
 
 
 def get_correlation_stats(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get correlation statistics."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     test_aligned = aligned_df[f"{metric}_test"]
@@ -386,11 +373,10 @@ def get_correlation_stats(
 
 
 def create_error_histogram(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[go.Figure, None]:
     """Create error distribution histogram from test and reference data."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     # Calculate errors (test - reference)
@@ -419,11 +405,10 @@ def create_error_histogram(
 
 
 def create_bland_altman_plot(
-    test_data: pd.DataFrame, ref_data: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame, metric: str
 ) -> Union[go.Figure, None]:
     """Create Bland-Altman plot from test and reference data."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     # Calculate mean and difference for Bland-Altman plot
@@ -484,14 +469,12 @@ def create_bland_altman_plot(
 
 
 def create_rolling_error_plot(
-    test_data: pd.DataFrame,
-    ref_data: pd.DataFrame,
+    aligned_df: pd.DataFrame,
     metric: str,
     window_size: int = 50,
 ) -> Union[go.Figure, None]:
     """Create rolling error / time-varying bias plot from test and reference data."""
-    aligned_df = get_aligned_data(test_data, ref_data, metric)
-    if aligned_df is None:
+    if aligned_df is None or aligned_df.empty:
         return None
 
     # Sort by elapsed_seconds for proper time ordering in plot
