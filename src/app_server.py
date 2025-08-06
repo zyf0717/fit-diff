@@ -361,11 +361,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.Calc
     def _get_prepared_data():
         try:
-            metric = (
-                input.comparison_metric()
-                if hasattr(input, "comparison_metric")
-                else "heart_rate"
-            )
+            metric = _get_comparison_metric()
 
             # Get outlier removal methods
             outlier_methods = []
