@@ -232,69 +232,39 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         return _safe_execute(_create_analysis_window, "analysisWindow")
 
-    @reactive.Calc
-    def _process_test_device_files():
-        test_files: List[FileInfo] = input.testFileUpload()
-        if not test_files:
+    def _process_device_files(file_infos: List[FileInfo], selected_attr: str) -> dict:
+        """Process uploaded FIT files based on a selected_attr list in input."""
+        if not file_infos:
             return {}
-
-        # Get selected test files
-        selected_files = []
-        if hasattr(input, "selected_test_files") and input.selected_test_files():
-            selected_files = input.selected_test_files()
+        # Determine selected file names
+        if hasattr(input, selected_attr) and getattr(input, selected_attr)():
+            selected_files = getattr(input, selected_attr)()
         else:
-            # Default to all files if no selection made yet
-            selected_files = [file_info["name"] for file_info in test_files]
-
-        test_device_data = {}
-        for file_info in test_files:
-            # Only process selected files
+            selected_files = [fi["name"] for fi in file_infos]
+        device_data = {}
+        for file_info in file_infos:
             if file_info["name"] not in selected_files:
                 continue
-
             try:
-                uploaded_file_path = file_info["datapath"]
-                _, record_df = process_fit(uploaded_file_path)
-                test_device_data[file_info["name"]] = (
-                    record_df  # Use record_df for analysis
-                )
+                _, record_df = process_fit(file_info["datapath"])
+                device_data[file_info["name"]] = record_df
             except Exception as e:
                 logger.error(
-                    f"Error processing test device file {file_info['name']}: {e}"
+                    "Error processing %s file %s: %s",
+                    selected_attr,
+                    file_info["name"],
+                    e,
                 )
-                test_device_data[file_info["name"]] = f"Error: {str(e)}"
-        return test_device_data
+                device_data[file_info["name"]] = f"Error: {str(e)}"
+        return device_data
+
+    @reactive.Calc
+    def _process_test_device_files():
+        return _process_device_files(input.testFileUpload(), "selected_test_files")
 
     @reactive.Calc
     def _process_reference_device_files():
-        ref_files: List[FileInfo] = input.refFileUpload()
-        if not ref_files:
-            return {}
-
-        # Get selected reference files
-        selected_files = []
-        if hasattr(input, "selected_ref_files") and input.selected_ref_files():
-            selected_files = input.selected_ref_files()
-        else:
-            # Default to all files if no selection made yet
-            selected_files = [file_info["name"] for file_info in ref_files]
-
-        ref_device_data = {}
-        for file_info in ref_files:
-            # Only process selected files
-            if file_info["name"] not in selected_files:
-                continue
-
-            try:
-                uploaded_file_path = file_info["datapath"]
-                _, record_df = process_fit(uploaded_file_path)
-                ref_device_data[file_info["name"]] = record_df
-            except Exception as e:
-                logger.error(
-                    f"Error processing reference device file {file_info['name']}: {e}"
-                )
-                ref_device_data[file_info["name"]] = f"Error: {str(e)}"
-        return ref_device_data
+        return _process_device_files(input.refFileUpload(), "selected_ref_files")
 
     @reactive.Calc
     def _all_fit_data():
@@ -384,7 +354,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             return test_data, ref_data
         except Exception as e:
-            logger.error(f"Error in _get_shifted_data: {e}")
+            logger.error("Error in _get_shifted_data: %s", e)
             return pd.DataFrame(), pd.DataFrame()
 
     @reactive.Calc
@@ -419,7 +389,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             default_value = (min_value, max_value)
             return {"min": min_value, "max": max_value, "default": default_value}
         except Exception as e:
-            logger.error(f"Error in _get_elapsed_seconds_range: {e}")
+            logger.error("Error in _get_elapsed_seconds_range: %s", e)
             return {"min": 0, "max": 60, "default": (0, 60)}
 
     @reactive.Calc
@@ -461,7 +431,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             return test_data, ref_data
         except Exception as e:
-            logger.error(f"Error in _get_trimmed_data: {e}")
+            logger.error("Error in _get_trimmed_data: %s", e)
             return pd.DataFrame(), pd.DataFrame()
 
     @reactive.Calc
@@ -511,7 +481,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             return aligned_df if not aligned_df.empty else None
         except Exception as e:
-            logger.error(f"Error in _get_aligned_data_with_outlier_removal: {e}")
+            logger.error("Error in _get_aligned_data_with_outlier_removal: %s", e)
             return None
 
     # Helper functions for error handling and data validation
@@ -530,7 +500,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         try:
             return func()
         except Exception as e:
-            logger.error(f"Error in {func_name}: {e}")
+            logger.error("Error in %s: %s", func_name, e)
             return default_return
 
     def _get_validated_aligned_data():

@@ -267,14 +267,14 @@ def get_bias_agreement_stats(
         # zero_method='wilcox' drops zero-differences for scipy ≥1.7
         t_stat, p_val = stats.wilcoxon(errors, zero_method="wilcox")
 
-    # 95% CI for bias
-    ci_low, ci_high = stats.t.interval(
-        0.95, df=n_points - 1, loc=bias, scale=stats.sem(errors)
-    )
+    # # 95% CI for bias
+    # ci_low, ci_high = stats.t.interval(
+    #     0.95, df=n_points - 1, loc=bias, scale=stats.sem(errors)
+    # )
 
-    # Limits of Agreement
-    loa_upper = bias + 1.96 * std_err
-    loa_lower = bias - 1.96 * std_err
+    # # Limits of Agreement
+    # loa_upper = bias + 1.96 * std_err
+    # loa_lower = bias - 1.96 * std_err
 
     # Effect size
     cohens_d = bias / std_err if std_err > 0 else np.nan
