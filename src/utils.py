@@ -668,7 +668,7 @@ async def generate_llm_summary(
     ):
         records = {
             "benchmark_metric": metric,
-            "bias_agreement": bias_stats.to_dict(orient="records"),
+            "bias": bias_stats.to_dict(orient="records"),
             "error_magnitude": error_stats.to_dict(orient="records"),
             "correlation": correlation_stats.to_dict(orient="records"),
         }
@@ -690,15 +690,16 @@ async def api_call_to_llm(records: dict) -> dict:
     }
     prompt = f"""
     Reason logically. Interpret the following JSON benchmark stats for non-technical readers, and explain in layman terms.
-    - Context: benchmarking of wearable devices regarding {records.get("benchmark_metric", "")}.
-    - Mainly focus on the key statistics that materially influence your verdict.
-    - Keep numerical values as is, do not round off, truncate or approximate.
-    - Always caveat any speculations not supported by the data.
-    - Always caveat any generic disclaimers.
-    - Output is meant for dashboard use.
-    - End with a a single-sentence verdict.
-    - Output valid HTML only, using <p>, <ul>, <li>, <strong>, and <em> tags for structure.
-    - No <html>, <head>, or <body> wrappers — only the HTML snippet for embedding.
+    Context: benchmarking of wearable devices for {records.get("benchmark_metric", "")}.
+    Use these categories as potential sources: bias, error magnitude (MAE, RMSE), correlation, significance tests.
+
+    - Always end with a verdict.
+    - Focus primarily on the key statistics that materially influence your verdict.
+    - Preserve all numbers exactly as given; do not change units or rounding.
+    - No speculative causes; caveat clearly if something is an inference.
+    - Dashboard tone; ≤ 200 words; no preamble, no code fences, no quotes.
+    - Output a valid HTML snippet only (no <html>, <head>, or <body>).
+    - Use only <p>, <ul>, <li>, <strong>, <em>.
 
     JSON:
     {json.dumps(records, indent=2)}
