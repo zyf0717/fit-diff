@@ -127,7 +127,13 @@ def server(input: Inputs, output: Outputs, session: Session):
                     ),
                     ui.card(
                         ui.card_header("LLM Generated Summary"),
-                        ui.output_text("llmSummaryText"),
+                        ui.layout_columns(
+                            ui.input_action_button(
+                                "llm_summary_regen", "Click to (re)generate"
+                            ),
+                            ui.output_ui("llmSummaryText"),
+                            col_widths=[3, 12],
+                        ),
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -611,7 +617,8 @@ def server(input: Inputs, output: Outputs, session: Session):
     def correlationTable():
         return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
 
-    @render.text
+    @render.ui
+    @reactive.event(input.llm_summary_regen)
     async def llmSummaryText():
         async def _generate_llm_summary():
             bias_stats = _get_bias_stats()
@@ -621,7 +628,8 @@ def server(input: Inputs, output: Outputs, session: Session):
                 bias_stats, error_stats, correlation_stats
             )
 
-        return await _safe_execute(_generate_llm_summary, "llmSummaryText", "")
+        summary = await _safe_execute(_generate_llm_summary, "llmSummaryText", "")
+        return ui.HTML(summary)
 
     @render.data_frame
     def fileInfoTable():

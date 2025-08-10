@@ -649,6 +649,7 @@ def get_raw_data_sample(
 
 
 async def generate_llm_summary(
+    metric: str,
     bias_stats: pd.DataFrame,
     error_stats: pd.DataFrame,
     correlation_stats: pd.DataFrame,
@@ -656,25 +657,25 @@ async def generate_llm_summary(
     """
     Generate a summary for the LLM based on the provided statistics.
     """
-    records = {}
-
-    if not bias_stats.empty:
-        records["bias_agreement"] = bias_stats.to_dict(orient="records")
+    # Only proceed if all three stats are present and non-empty
+    if (
+        bias_stats is not None
+        and not bias_stats.empty
+        and error_stats is not None
+        and not error_stats.empty
+        and correlation_stats is not None
+        and not correlation_stats.empty
+    ):
+        records = {
+            "benchmark_metric": metric,
+            "bias_agreement": bias_stats.to_dict(orient="records"),
+            "error_magnitude": error_stats.to_dict(orient="records"),
+            "correlation": correlation_stats.to_dict(orient="records"),
+        }
+        response = await api_call_to_llm(records)
+        return response.get("choices", [{}])[0].get("message", {}).get("content", "")
     else:
-        records["bias_agreement"] = []
-
-    if not error_stats.empty:
-        records["error_magnitude"] = error_stats.to_dict(orient="records")
-    else:
-        records["error_magnitude"] = []
-
-    if not correlation_stats.empty:
-        records["correlation"] = correlation_stats.to_dict(orient="records")
-    else:
-        records["correlation"] = []
-
-    response = await api_call_to_llm(records)
-    return json.dumps(response, indent=2)
+        return "Insufficient statistics: all of bias, error, and correlation stats must be present and non-empty."
 
 
 async def api_call_to_llm(records: dict) -> dict:
@@ -688,10 +689,16 @@ async def api_call_to_llm(records: dict) -> dict:
         "Content-Type": "application/json",
     }
     prompt = f"""
-    You are a technical writer. Interpret the following JSON benchmark stats for non-technical readers.
-    - Explain whether methods are interchangeable.
-    - Note bias direction/magnitude, typical error (MAE/RMSE), correlation, and any non-normality caveats.
-    - Keep it to 50–70 words and include a single-sentence verdict.
+    Reason logically. Interpret the following JSON benchmark stats for non-technical readers, and explain in layman terms.
+    - Context: benchmarking of wearable devices regarding {records.get("benchmark_metric", "")}.
+    - Mainly focus on the key statistics that materially influence your verdict.
+    - Preserve all numerical values exactly as given.
+    - Always caveat any speculations not supported by the data.
+    - Always caveat any generic disclaimers.
+    - Output is meant for dashboard use.
+    - End with a a single-sentence verdict.
+    - Output valid HTML only, using <p>, <ul>, <li>, <strong>, and <em> tags for structure.
+    - No <html>, <head>, or <body> wrappers — only the HTML snippet for embedding.
 
     JSON:
     {json.dumps(records, indent=2)}
