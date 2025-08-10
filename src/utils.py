@@ -2,14 +2,22 @@
 Supporting utils and functions
 """
 
+import json
+import os
 from pathlib import Path
 from typing import Tuple, Union
 
+import aiohttp
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from dotenv import load_dotenv
 from garmin_fit_sdk import Decoder, Stream
 from scipy import stats
+
+load_dotenv(override=True)
+API_KEY_ID = os.getenv("API_KEY_ID", "")
+API_KEY_SECRET = os.getenv("API_KEY_SECRET", "")
 
 
 def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -638,3 +646,68 @@ def get_raw_data_sample(
     sample_df[numeric_columns] = sample_df[numeric_columns].round(3)
 
     return sample_df
+
+
+async def generate_llm_summary(
+    bias_stats: pd.DataFrame,
+    error_stats: pd.DataFrame,
+    correlation_stats: pd.DataFrame,
+) -> str:
+    """
+    Generate a summary for the LLM based on the provided statistics.
+    """
+    records = {}
+
+    if not bias_stats.empty:
+        records["bias_agreement"] = bias_stats.to_dict(orient="records")
+    else:
+        records["bias_agreement"] = []
+
+    if not error_stats.empty:
+        records["error_magnitude"] = error_stats.to_dict(orient="records")
+    else:
+        records["error_magnitude"] = []
+
+    if not correlation_stats.empty:
+        records["correlation"] = correlation_stats.to_dict(orient="records")
+    else:
+        records["correlation"] = []
+
+    response = await api_call_to_llm(records)
+    return json.dumps(response, indent=2)
+
+
+async def api_call_to_llm(records: dict) -> dict:
+    """
+    Make an async API call to the LLM with the provided records.
+    """
+    url = "https://llm-hrpc.paperclips.dev/v1/chat/completions"
+    headers = {
+        "CF-Access-Client-Id": API_KEY_ID,
+        "CF-Access-Client-Secret": API_KEY_SECRET,
+        "Content-Type": "application/json",
+    }
+    prompt = f"""
+    You are a technical writer. Interpret the following JSON benchmark stats for non-technical readers.
+    - Explain whether methods are interchangeable.
+    - Note bias direction/magnitude, typical error (MAE/RMSE), correlation, and any non-normality caveats.
+    - Keep it to 50–70 words and include a single-sentence verdict.
+
+    JSON:
+    {json.dumps(records, indent=2)}
+    """
+    data = {
+        "model": "openai/gpt-oss-20b",
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, headers=headers, json=data, timeout=30
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+    except aiohttp.ClientError as e:
+        print(f"Error occurred: {e}")
+        return {"error": str(e)}

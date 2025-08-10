@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import List
 
@@ -13,6 +14,7 @@ from src.utils import (
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
+    generate_llm_summary,
     get_bias_agreement_stats,
     get_correlation_stats,
     get_error_magnitude_stats,
@@ -27,6 +29,30 @@ logger = logging.getLogger(__name__)
 
 
 def server(input: Inputs, output: Outputs, session: Session):
+    def _get_stats():
+        aligned_data = _get_validated_aligned_data()
+        if aligned_data is None:
+            return pd.DataFrame()
+        return calculate_basic_stats(aligned_data, _get_comparison_metric())
+
+    def _get_bias_stats():
+        aligned_data = _get_validated_aligned_data()
+        if aligned_data is None:
+            return pd.DataFrame()
+        return get_bias_agreement_stats(aligned_data, _get_comparison_metric())
+
+    def _get_error_stats():
+        aligned_data = _get_validated_aligned_data()
+        if aligned_data is None:
+            return pd.DataFrame()
+        return get_error_magnitude_stats(aligned_data, _get_comparison_metric())
+
+    def _get_correlation_stats():
+        aligned_data = _get_validated_aligned_data()
+        if aligned_data is None:
+            return pd.DataFrame()
+        return get_correlation_stats(aligned_data, _get_comparison_metric())
+
     # Enable dynamic theme switching
     shinyswatch.theme_picker_server()
 
@@ -98,6 +124,10 @@ def server(input: Inputs, output: Outputs, session: Session):
                             ui.output_data_frame("correlationTable"),
                         ),
                         col_widths=[4, 4, 4],
+                    ),
+                    ui.card(
+                        ui.card_header("LLM Generated Summary"),
+                        ui.output_text("llmSummaryText"),
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -510,16 +540,6 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None
         return aligned_data
 
-    def _get_validated_data():
-        """Get validated prepared data or return None if invalid."""
-        prepared_data = _get_trimmed_data()
-        if not prepared_data or len(prepared_data) != 2:
-            return None
-        test_data, ref_data = prepared_data
-        if test_data.empty or ref_data.empty:
-            return None
-        return test_data, ref_data
-
     def _get_comparison_metric():
         """Get comparison metric with fallback to 'heart_rate'."""
         return (
@@ -577,43 +597,31 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @render.data_frame
     def basicStatsTable():
-        def _get_stats():
-            aligned_data = _get_validated_aligned_data()
-            if aligned_data is None:
-                return pd.DataFrame()
-            return calculate_basic_stats(aligned_data, _get_comparison_metric())
-
         return _safe_execute(_get_stats, "basicStatsTable", pd.DataFrame())
 
     @render.data_frame
     def biasAgreementTable():
-        def _get_bias_stats():
-            aligned_data = _get_validated_aligned_data()
-            if aligned_data is None:
-                return pd.DataFrame()
-            return get_bias_agreement_stats(aligned_data, _get_comparison_metric())
-
         return _safe_execute(_get_bias_stats, "biasAgreementTable", pd.DataFrame())
 
     @render.data_frame
     def errorMagnitudeTable():
-        def _get_error_stats():
-            aligned_data = _get_validated_aligned_data()
-            if aligned_data is None:
-                return pd.DataFrame()
-            return get_error_magnitude_stats(aligned_data, _get_comparison_metric())
-
         return _safe_execute(_get_error_stats, "errorMagnitudeTable", pd.DataFrame())
 
     @render.data_frame
     def correlationTable():
-        def _get_correlation_stats():
-            aligned_data = _get_validated_aligned_data()
-            if aligned_data is None:
-                return pd.DataFrame()
-            return get_correlation_stats(aligned_data, _get_comparison_metric())
-
         return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
+
+    @render.text
+    async def llmSummaryText():
+        async def _generate_llm_summary():
+            bias_stats = _get_bias_stats()
+            error_stats = _get_error_stats()
+            correlation_stats = _get_correlation_stats()
+            return await generate_llm_summary(
+                bias_stats, error_stats, correlation_stats
+            )
+
+        return await _safe_execute(_generate_llm_summary, "llmSummaryText", "")
 
     @render.data_frame
     def fileInfoTable():
