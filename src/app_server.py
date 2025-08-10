@@ -625,7 +625,10 @@ def server(input: Inputs, output: Outputs, session: Session):
             error_stats = _get_error_stats()
             correlation_stats = _get_correlation_stats()
             return await generate_llm_summary(
-                bias_stats, error_stats, correlation_stats
+                metric=input.comparison_metric(),
+                bias_stats=bias_stats,
+                error_stats=error_stats,
+                correlation_stats=correlation_stats,
             )
 
         summary = await _safe_execute(_generate_llm_summary, "llmSummaryText", "")

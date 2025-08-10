@@ -692,7 +692,7 @@ async def api_call_to_llm(records: dict) -> dict:
     Reason logically. Interpret the following JSON benchmark stats for non-technical readers, and explain in layman terms.
     - Context: benchmarking of wearable devices regarding {records.get("benchmark_metric", "")}.
     - Mainly focus on the key statistics that materially influence your verdict.
-    - Preserve all numerical values exactly as given.
+    - Keep numerical values as is, do not round off, truncate or approximate.
     - Always caveat any speculations not supported by the data.
     - Always caveat any generic disclaimers.
     - Output is meant for dashboard use.
