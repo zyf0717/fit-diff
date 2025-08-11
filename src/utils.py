@@ -18,6 +18,8 @@ from scipy import stats
 load_dotenv(override=True)
 API_KEY_ID = os.getenv("API_KEY_ID", "")
 API_KEY_SECRET = os.getenv("API_KEY_SECRET", "")
+LLM_API_URL = os.getenv("LLM_API_URL", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "")
 
 
 def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -682,7 +684,6 @@ async def api_call_to_llm(records: dict) -> dict:
     """
     Make an async API call to the LLM with the provided records.
     """
-    url = "https://llm-hrpc.paperclips.dev/v1/chat/completions"
     headers = {
         "CF-Access-Client-Id": API_KEY_ID,
         "CF-Access-Client-Secret": API_KEY_SECRET,
@@ -705,14 +706,14 @@ async def api_call_to_llm(records: dict) -> dict:
     {json.dumps(records, indent=2)}
     """
     data = {
-        "model": "openai/gpt-oss-20b",
+        "model": LLM_MODEL,
         "messages": [{"role": "user", "content": prompt}],
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                url, headers=headers, json=data, timeout=30
+                LLM_API_URL, headers=headers, json=data, timeout=30
             ) as response:
                 response.raise_for_status()
                 return await response.json()
