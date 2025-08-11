@@ -2,7 +2,6 @@
 Data processing utilities for FIT files.
 """
 
-import os
 from pathlib import Path
 from typing import Tuple, Union
 

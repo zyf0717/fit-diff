@@ -4,7 +4,6 @@ Visualization utilities using Plotly.
 
 from typing import Union
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
