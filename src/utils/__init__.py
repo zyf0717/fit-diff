@@ -15,7 +15,7 @@ from .data_processing import (
 )
 
 # LLM integration functions
-from .llm_integration import api_call_to_llm, generate_llm_summary
+from .llm_integration import generate_llm_summary_stream
 
 # Statistical analysis functions
 from .statistics import (
@@ -51,6 +51,5 @@ __all__ = [
     "create_bland_altman_plot",
     "create_rolling_error_plot",
     # LLM integration
-    "generate_llm_summary",
-    "api_call_to_llm",
+    "generate_llm_summary_stream",
 ]

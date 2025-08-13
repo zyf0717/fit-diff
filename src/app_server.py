@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import List
 
@@ -14,7 +13,7 @@ from src.utils import (
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
-    generate_llm_summary,
+    generate_llm_summary_stream,
     get_bias_agreement_stats,
     get_correlation_stats,
     get_error_magnitude_stats,
@@ -131,8 +130,10 @@ def server(input: Inputs, output: Outputs, session: Session):
                             ui.input_action_button(
                                 "llm_summary_regen", "Click to (re)generate"
                             ),
-                            ui.output_ui("llmSummaryText"),
-                            col_widths=[3, 12],
+                            ui.output_markdown_stream(
+                                "stream_output", auto_scroll=False
+                            ),
+                            col_widths=[3, 9],
                         ),
                     ),
                     ui.layout_columns(
@@ -617,22 +618,19 @@ def server(input: Inputs, output: Outputs, session: Session):
     def correlationTable():
         return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
 
-    @render.ui
-    @reactive.event(input.llm_summary_regen)
-    async def llmSummaryText():
-        async def _generate_llm_summary():
-            bias_stats = _get_bias_stats()
-            error_stats = _get_error_stats()
-            correlation_stats = _get_correlation_stats()
-            return await generate_llm_summary(
-                metric=input.comparison_metric(),
-                bias_stats=bias_stats,
-                error_stats=error_stats,
-                correlation_stats=correlation_stats,
-            )
+    md = ui.MarkdownStream("stream_output")
 
-        summary = await _safe_execute(_generate_llm_summary, "llmSummaryText", "")
-        return ui.HTML(summary)
+    @reactive.effect
+    @reactive.event(input.llm_summary_regen)
+    async def _():
+        await md.stream(
+            generate_llm_summary_stream(
+                metric=input.comparison_metric(),
+                bias_stats=_get_bias_stats(),
+                error_stats=_get_error_stats(),
+                correlation_stats=_get_correlation_stats(),
+            )
+        )
 
     @render.data_frame
     def fileInfoTable():
