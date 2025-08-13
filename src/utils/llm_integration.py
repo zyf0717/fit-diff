@@ -125,20 +125,32 @@ async def generate_llm_summary_stream(
     messages = [
         {
             "role": "system",
-            "content": "You are a precise data analyst. Summarize objectively with clear, quantitative statements.",
+            "content": (
+                "You are a precise data analyst. Reason logically and explain to non-technical readers in plain language. "
+                "OUTPUT RULES:\n"
+                "- Return ONLY a valid Markdown snippet.\n"
+                "- Dashboard tone; ≤ 200 words; no preamble, no code fences, no quotes.\n"
+                "- Preserve all numbers EXACTLY as given (no rounding, no unit changes, no re-computation).\n"
+                "- Use bullet points for key statistics and numeric ranges.\n"
+                "- Focus on stats that materially influence the verdict; caveat clearly if anything is an inference.\n"
+                "- Always end with a **Verdict:** …"
+            ),
         },
         {
             "role": "user",
             "content": (
-                "Given the benchmark metric and three tables (bias, error magnitude, correlation), "
-                "produce a concise technical summary with bullet points and numeric ranges.\n\n"
-                f"Payload (JSON):\n{json.dumps(records)}"
+                "Interpret the following JSON benchmark stats for wearable-device benchmarking of "
+                f"{records.get('benchmark_metric', '')}. Consider these sources where present: "
+                "bias, error magnitude (MAE, RMSE), correlation, significance tests.\n\n"
+                "Produce a concise dashboard-style summary as instructed above.\n\n"
+                f"Payload (JSON):\n{json.dumps(records, ensure_ascii=False)}"
             ),
         },
     ]
+
     payload = {
         "messages": messages,
-        "temperature": 0.2,
+        # "temperature": 0.2,
         "stream": True,
     }
     headers = {
