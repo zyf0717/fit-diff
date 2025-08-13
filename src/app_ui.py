@@ -6,9 +6,9 @@ app_ui = ui.page_fluid(
         ui.sidebar(
             ui.tags.script(
                 """
-                Shiny.addCustomMessageHandler("logout", function(_) {{
+                Shiny.addCustomMessageHandler("logout", function(_) {
                     window.location.href = "https://fit-diff.yifei.sg/cdn-cgi/access/logout";
-                }});
+                });
                 """
             ),
             ui.input_file(
