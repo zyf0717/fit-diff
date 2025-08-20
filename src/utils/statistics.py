@@ -99,7 +99,7 @@ def get_bias_agreement_stats(
     rows = [
         ("Mean Bias", round(bias, 6)),
         ("Shapiro–Wilk p-value", round(sw_p, 6)),
-        (f"{test_name} statistic", round(t_stat, 6)),
+        # (f"{test_name} statistic", round(t_stat, 6)),
         (f"{test_name} p-value", round(p_val, 8)),
         ("Cohen's d", round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A"),
     ]
