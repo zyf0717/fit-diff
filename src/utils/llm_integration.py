@@ -56,7 +56,7 @@ async def generate_llm_summary_stream(
         {
             "role": "system",
             "content": (
-                "You are a precise data analyst. Reason logically and explain to non-technical readers in plain language. "
+                "You are a precise data analyst. Reason logically and explain to non-technical readers in plain language.\n"
                 "OUTPUT RULES:\n"
                 "- Return ONLY a valid Markdown snippet.\n"
                 "- Around 200 words, no preamble, no code fences, no quotes.\n"

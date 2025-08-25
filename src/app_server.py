@@ -61,7 +61,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         await session.send_custom_message("logout", {})
 
     @render.ui
-    def main_content():
+    def mainContent():
         # Only render main content when at least one file from each type is uploaded
         test_files = input.testFileUpload()
         ref_files = input.refFileUpload()
@@ -131,7 +131,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                                 "llm_summary_regen", "Click to (re)generate"
                             ),
                             ui.output_markdown_stream(
-                                "stream_output", auto_scroll=False
+                                "streamOutput", auto_scroll=False
                             ),
                             col_widths=[3, 9],
                         ),
@@ -618,7 +618,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     def correlationTable():
         return _safe_execute(_get_correlation_stats, "correlationTable", pd.DataFrame())
 
-    md = ui.MarkdownStream("stream_output")
+    md = ui.MarkdownStream("streamOutput")
 
     @reactive.effect
     @reactive.event(input.llm_summary_regen)

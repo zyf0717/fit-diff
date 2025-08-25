@@ -27,7 +27,7 @@ app_ui = ui.page_fluid(
             ui.hr(),
             ui.input_action_button("logout", "Logout"),
         ),
-        ui.output_ui("main_content"),
+        ui.output_ui("mainContent"),
     ),
     theme=shinyswatch.theme.flatly,
 )
