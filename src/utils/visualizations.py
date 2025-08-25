@@ -15,25 +15,32 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
 
     fig = go.Figure()
 
+    # Track if averaging occurred for either test or reference
+    averaging_happened = False
+
     # Add trend lines for both test and reference data
     for source_name, col_suffix in [("test", "_test"), ("reference", "_ref")]:
         metric_col = f"{metric}{col_suffix}"
         elapsed_col = f"elapsed_seconds{col_suffix}"
 
         if metric_col in aligned_df.columns and elapsed_col in aligned_df.columns:
-            # Calculate mean per second for trend line
             temp_df = aligned_df[[elapsed_col, metric_col]].dropna()
             if not temp_df.empty:
+                # Check if any elapsed_seconds value is duplicated (i.e., averaging will occur)
+                rounded = temp_df[elapsed_col].round()
+                if rounded.duplicated().any():
+                    averaging_happened = True
                 mean_per_second = (
-                    temp_df.groupby(temp_df[elapsed_col].round())[metric_col]
-                    .mean()
-                    .reset_index()
+                    temp_df.groupby(rounded)[metric_col].mean().reset_index()
+                )
+                mean_per_second.rename(
+                    columns={elapsed_col: "elapsed_seconds"}, inplace=True
                 )
 
                 if not mean_per_second.empty:
                     fig.add_trace(
                         go.Scatter(
-                            x=mean_per_second[elapsed_col],
+                            x=mean_per_second["elapsed_seconds"],
                             y=mean_per_second[metric_col],
                             mode="lines",
                             name=f"{source_name}",
@@ -41,9 +48,13 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
                         )
                     )
 
+    if averaging_happened:
+        yaxis_title = f"Mean {metric.replace('_', ' ').title()}"
+    else:
+        yaxis_title = metric.replace("_", " ").title()
     fig.update_layout(
-        xaxis_title="Elapsed Time (seconds)",
-        yaxis_title=metric,
+        xaxis_title="Elapsed Seconds",
+        yaxis_title=yaxis_title,
         hovermode="x unified",
     )
     return fig
