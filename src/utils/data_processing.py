@@ -101,14 +101,6 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     session_df["filename"] = str(file_path.name)
 
-    print(f"Processed FIT file: {file_path.name} with {len(record_df)} records")
-    print(
-        f"FIT file start time: {min(record_df['timestamp']) if 'timestamp' in record_df.columns else 'N/A'}"
-    )
-    print(
-        f"FIT file end time: {max(record_df['timestamp']) if 'timestamp' in record_df.columns else 'N/A'}"
-    )
-
     return session_df, record_df
 
 
@@ -187,14 +179,6 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
             session_data[f"{col}_min"] = df[col].min()
 
     session_df = pd.DataFrame([session_data])
-
-    print(f"Processed CSV file: {file_path.name} with {len(record_df)} records")
-    print(
-        f"CSV file start time: {min(record_df['timestamp']) if 'timestamp' in record_df.columns else 'N/A'}"
-    )
-    print(
-        f"CSV file end time: {max(record_df['timestamp']) if 'timestamp' in record_df.columns else 'N/A'}"
-    )
 
     return session_df, record_df
 
@@ -403,5 +387,4 @@ def get_raw_data_sample(
     numeric_columns = sample_df.select_dtypes(include=[np.number]).columns
     sample_df[numeric_columns] = sample_df[numeric_columns].round(3)
 
-    return sample_df
     return sample_df
