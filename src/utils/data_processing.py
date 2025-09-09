@@ -94,7 +94,28 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     # Convert timestamp column to datetime
     try:
-        df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+        # First, try to parse as datetime
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col], dayfirst=True)
+
+        # Check if timezone info is present or if we need to assume GMT+8
+        if df[timestamp_col].dt.tz is None:
+            # No timezone info - assume GMT+8 and convert to UTC
+            df[timestamp_col] = (
+                df[timestamp_col].dt.tz_localize("Asia/Singapore").dt.tz_convert("UTC")
+            )
+        else:
+            # Timezone info present - convert to UTC
+            df[timestamp_col] = df[timestamp_col].dt.tz_convert("UTC")
+
+        # Remove timezone info to keep as naive UTC datetime
+        df[timestamp_col] = df[timestamp_col].dt.tz_localize(None)
+
+        # Convert to string format matching FIT files (ISO format with 'Z' suffix)
+        timestamps_dt = df[timestamp_col].copy()  # Keep for calculations
+        df[timestamp_col] = df[timestamp_col].dt.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )  # ISO format, standardized with FIT files
+
     except Exception as e:
         raise ValueError(f"Error parsing timestamp column '{timestamp_col}': {e}")
 
@@ -108,12 +129,10 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Create session_df (summary data - one row per file)
     session_data = {
         "filename": str(file_path.name),
-        "start_time": df["timestamp"].min(),
-        "end_time": df["timestamp"].max(),
+        "start_time": df["timestamp"].min(),  # Keep as string for consistency with FIT
+        "end_time": df["timestamp"].max(),  # Keep as string for consistency with FIT
         "total_records": len(df),
-        "duration_seconds": (
-            df["timestamp"].max() - df["timestamp"].min()
-        ).total_seconds(),
+        "duration_seconds": (timestamps_dt.max() - timestamps_dt.min()).total_seconds(),
     }
 
     # Add summary statistics for numeric columns
@@ -172,7 +191,7 @@ def prepare_data_for_analysis(
     # Each file starts at elapsed_seconds = 0 from its own first timestamp (after filtering)
     for df in [test_data_df, ref_data_df]:
         df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
-            lambda x: (x - x.min()).dt.total_seconds()
+            lambda x: (pd.to_datetime(x) - pd.to_datetime(x.min())).dt.total_seconds()
         )
 
     return test_data_df, ref_data_df

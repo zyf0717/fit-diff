@@ -157,7 +157,10 @@ class TestProcessFit:
         assert "filename" in session_df.columns
         assert record_df["filename"].iloc[0] == "test.csv"
         assert "timestamp" in record_df.columns
-        assert pd.api.types.is_datetime64_any_dtype(record_df["timestamp"])
+        # Timestamps should now be strings in ISO format to match FIT files
+        assert record_df["timestamp"].dtype == "object"
+        assert all(isinstance(ts, str) for ts in record_df["timestamp"])
+        assert all("T" in ts and ts.endswith("Z") for ts in record_df["timestamp"])
 
     @patch("src.utils.data_processing.pd.read_csv")
     def test_process_csv_no_timestamp(self, mock_read_csv):
@@ -176,6 +179,38 @@ class TestProcessFit:
         """Test unsupported file format raises error."""
         with pytest.raises(ValueError, match="Unsupported file format"):
             process_file("test.txt")
+
+    @patch("src.utils.data_processing.pd.read_csv")
+    def test_process_csv_gmt8_to_utc_conversion(self, mock_read_csv):
+        """Test CSV processing converts GMT+8 timestamps to UTC."""
+        # Create mock CSV data with GMT+8 timestamps
+        mock_csv_data = pd.DataFrame(
+            {
+                "timestamp": [
+                    "2023-01-01 12:00:00",
+                    "2023-01-01 13:00:00",
+                    "2023-01-01 14:00:00",
+                ],
+                "heart_rate": [150, 155, 152],
+                "speed": [5.5, 6.0, 5.8],
+            }
+        )
+        mock_read_csv.return_value = mock_csv_data
+
+        # Test
+        session_df, record_df = process_file("test.csv")
+
+        # Verify timestamps are converted (GMT+8 12:00 becomes UTC 04:00) and formatted as strings
+        expected_utc_strings = [
+            "2023-01-01T04:00:00Z",
+            "2023-01-01T05:00:00Z",
+            "2023-01-01T06:00:00Z",
+        ]
+        pd.testing.assert_series_equal(
+            record_df["timestamp"].reset_index(drop=True),
+            pd.Series(expected_utc_strings).reset_index(drop=True),
+            check_names=False,
+        )
 
 
 class TestPrepareDataForAnalysis:
@@ -247,6 +282,72 @@ class TestPrepareDataForAnalysis:
         """Test data preparation with invalid input."""
         # Test with None
         assert prepare_data_for_analysis(None, "heart_rate") is None
+
+    @patch("src.utils.data_processing.pd.read_csv")
+    @patch("src.utils.data_processing.Stream")
+    @patch("src.utils.data_processing.Decoder")
+    def test_prepare_data_with_mixed_csv_fit_files(
+        self, mock_decoder_class, mock_stream_class, mock_read_csv
+    ):
+        """Test prepare_data_for_analysis with one CSV (GMT+8) and one FIT (UTC) file."""
+        # Mock CSV data (GMT+8 timestamps)
+        mock_csv_data = pd.DataFrame(
+            {
+                "timestamp": [
+                    "2023-01-01 12:00:00",
+                    "2023-01-01 12:00:01",
+                    "2023-01-01 12:00:02",
+                ],
+                "heart_rate": [150, 155, 152],
+            }
+        )
+        mock_read_csv.return_value = mock_csv_data
+
+        # Mock FIT file processing
+        mock_stream = Mock()
+        mock_stream_class.from_file.return_value = mock_stream
+        mock_decoder = Mock()
+        mock_decoder_class.return_value = mock_decoder
+
+        # Mock FIT messages with UTC timestamps that match CSV after conversion
+        mock_messages = {
+            "record_mesgs": [
+                {
+                    "heart_rate": 148,
+                    "timestamp": "2023-01-01T04:00:00Z",
+                },  # UTC equivalent of CSV 12:00 GMT+8
+                {
+                    "heart_rate": 153,
+                    "timestamp": "2023-01-01T04:00:01Z",
+                },  # UTC equivalent of CSV 12:01 GMT+8
+                {
+                    "heart_rate": 150,
+                    "timestamp": "2023-01-01T04:00:02Z",
+                },  # UTC equivalent of CSV 12:02 GMT+8
+            ],
+            "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 150}],
+        }
+        mock_decoder.read.return_value = (mock_messages, [])
+
+        # Process both files
+        csv_session, csv_record = process_file("test.csv")
+        fit_session, fit_record = process_file("test.fit")
+
+        # Test prepare_data_for_analysis with mixed file types
+        result = prepare_data_for_analysis((csv_record, fit_record), "heart_rate")
+
+        # Verify
+        assert result is not None
+        test_data, ref_data = result
+        assert isinstance(test_data, pd.DataFrame)
+        assert isinstance(ref_data, pd.DataFrame)
+        assert len(test_data) == 3  # Should have 3 common timestamps
+        assert len(ref_data) == 3
+        assert "elapsed_seconds" in test_data.columns
+        assert "elapsed_seconds" in ref_data.columns
+
+        # Verify timestamps are properly aligned (both should be in UTC)
+        assert test_data["timestamp"].iloc[0] == ref_data["timestamp"].iloc[0]
 
         # Test with empty tuple
         assert prepare_data_for_analysis((), "heart_rate") is None
