@@ -72,22 +72,10 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     # Try to identify timestamp column
     timestamp_cols = [
-        col for col in df.columns if "time" in col.lower() or "timestamp" in col.lower()
+        col
+        for col in df.columns
+        if col.lower() in ["timestamp", "datetime", "time_stamp", "date_time", "time"]
     ]
-    if not timestamp_cols:
-        # Look for common datetime patterns in column names
-        datetime_cols = [
-            col
-            for col in df.columns
-            if any(
-                pattern in col.lower()
-                for pattern in ["date", "time", "timestamp", "datetime"]
-            )
-        ]
-        if datetime_cols:
-            timestamp_cols = datetime_cols
-        else:
-            raise ValueError("No timestamp column found in CSV file")
 
     # Use the first timestamp column found
     timestamp_col = timestamp_cols[0]
@@ -95,7 +83,7 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Convert timestamp column to datetime
     try:
         # First, try to parse as datetime
-        df[timestamp_col] = pd.to_datetime(df[timestamp_col], dayfirst=True)
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors="raise")
 
         # Check if timezone info is present or if we need to assume GMT+8
         if df[timestamp_col].dt.tz is None:

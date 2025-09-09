@@ -211,3 +211,6 @@ nohup.out
 
 # crontab
 cron.sh
+
+# data files
+*/data
