@@ -10,7 +10,7 @@ from .data_processing import (
     get_file_information,
     get_raw_data_sample,
     prepare_data_for_analysis,
-    process_fit,
+    process_file,
     remove_outliers,
 )
 
@@ -35,7 +35,7 @@ from .visualizations import (
 
 __all__ = [
     # Data processing
-    "process_fit",
+    "process_file",
     "prepare_data_for_analysis",
     "remove_outliers",
     "get_file_information",

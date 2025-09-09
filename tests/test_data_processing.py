@@ -8,11 +8,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.utils import prepare_data_for_analysis, process_fit, remove_outliers
+from src.utils import prepare_data_for_analysis, process_file, remove_outliers
 
 
 class TestProcessFit:
-    """Test cases for process_fit function."""
+    """Test cases for process_file function."""
 
     @patch("src.utils.data_processing.Stream")
     @patch("src.utils.data_processing.Decoder")
@@ -36,7 +36,7 @@ class TestProcessFit:
         mock_decoder.read.return_value = (mock_messages, [])
 
         # Test
-        session_df, record_df = process_fit("test.fit")
+        session_df, record_df = process_file("test.fit")
 
         # Verify
         assert isinstance(session_df, pd.DataFrame)
@@ -74,7 +74,7 @@ class TestProcessFit:
         mock_decoder.read.return_value = (mock_messages, [])
 
         # Test
-        session_df, record_df = process_fit("test.fit")
+        session_df, record_df = process_file("test.fit")
 
         # Verify position conversion
         assert "position_lat" in record_df.columns
@@ -103,7 +103,7 @@ class TestProcessFit:
 
         # Test
         with pytest.raises(ValueError, match="No record messages found"):
-            process_fit("test.fit")
+            process_file("test.fit")
 
     @patch("src.utils.data_processing.Stream")
     @patch("src.utils.data_processing.Decoder")
@@ -126,7 +126,56 @@ class TestProcessFit:
 
         # Test
         with pytest.raises(ValueError, match="No session messages found"):
-            process_fit("test.fit")
+            process_file("test.fit")
+
+    @patch("src.utils.data_processing.pd.read_csv")
+    def test_process_csv_success(self, mock_read_csv):
+        """Test successful CSV file processing."""
+        # Create mock CSV data
+        mock_csv_data = pd.DataFrame(
+            {
+                "timestamp": [
+                    "2023-01-01 12:00:00",
+                    "2023-01-01 12:00:01",
+                    "2023-01-01 12:00:02",
+                ],
+                "heart_rate": [150, 155, 152],
+                "speed": [5.5, 6.0, 5.8],
+            }
+        )
+        mock_read_csv.return_value = mock_csv_data
+
+        # Test
+        session_df, record_df = process_file("test.csv")
+
+        # Verify
+        assert isinstance(session_df, pd.DataFrame)
+        assert isinstance(record_df, pd.DataFrame)
+        assert len(record_df) == 3
+        assert len(session_df) == 1
+        assert "filename" in record_df.columns
+        assert "filename" in session_df.columns
+        assert record_df["filename"].iloc[0] == "test.csv"
+        assert "timestamp" in record_df.columns
+        assert pd.api.types.is_datetime64_any_dtype(record_df["timestamp"])
+
+    @patch("src.utils.data_processing.pd.read_csv")
+    def test_process_csv_no_timestamp(self, mock_read_csv):
+        """Test CSV file with no timestamp column raises error."""
+        # Create mock CSV data without timestamp
+        mock_csv_data = pd.DataFrame(
+            {"heart_rate": [150, 155, 152], "speed": [5.5, 6.0, 5.8]}
+        )
+        mock_read_csv.return_value = mock_csv_data
+
+        # Test
+        with pytest.raises(ValueError, match="No timestamp column found"):
+            process_file("test.csv")
+
+    def test_process_unsupported_format(self):
+        """Test unsupported file format raises error."""
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            process_file("test.txt")
 
 
 class TestPrepareDataForAnalysis:

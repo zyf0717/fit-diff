@@ -1,5 +1,5 @@
 """
-Data processing utilities for FIT files.
+Data processing utilities for FIT and CSV files.
 """
 
 from pathlib import Path
@@ -10,13 +10,25 @@ import pandas as pd
 from garmin_fit_sdk import Decoder, Stream
 
 
-def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def process_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Read a FIT file and return:
+    Read a FIT or CSV file and return:
       - session_df: one‐row DataFrame of all session messages
       - record_df: one‐row per 'record' message (timestamped samples)
     """
-    stream = Stream.from_file(file_path)
+    file_path = Path(file_path)
+
+    if file_path.suffix.lower() == ".csv":
+        return _process_csv(file_path)
+    elif file_path.suffix.lower() == ".fit":
+        return _process_fit_file(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+
+def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Process a FIT file."""
+    stream = Stream.from_file(str(file_path))
     decoder = Decoder(stream)
     messages, _ = decoder.read(  # All defaults, listed for clarity
         apply_scale_and_offset=True,
@@ -35,12 +47,84 @@ def process_fit(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if "position_lat" in record_df.columns and "position_long" in record_df.columns:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
-    record_df["filename"] = str(Path(file_path).name)
+    record_df["filename"] = str(file_path.name)
 
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-    session_df["filename"] = str(Path(file_path).name)
+    session_df["filename"] = str(file_path.name)
+
+    return session_df, record_df
+
+
+def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Process a CSV file, converting it to the same format as FIT files."""
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        raise ValueError(f"Error reading CSV file: {e}")
+
+    if df.empty:
+        raise ValueError("CSV file is empty")
+
+    # Add filename to the dataframe
+    df["filename"] = str(file_path.name)
+
+    # Try to identify timestamp column
+    timestamp_cols = [
+        col for col in df.columns if "time" in col.lower() or "timestamp" in col.lower()
+    ]
+    if not timestamp_cols:
+        # Look for common datetime patterns in column names
+        datetime_cols = [
+            col
+            for col in df.columns
+            if any(
+                pattern in col.lower()
+                for pattern in ["date", "time", "timestamp", "datetime"]
+            )
+        ]
+        if datetime_cols:
+            timestamp_cols = datetime_cols
+        else:
+            raise ValueError("No timestamp column found in CSV file")
+
+    # Use the first timestamp column found
+    timestamp_col = timestamp_cols[0]
+
+    # Convert timestamp column to datetime
+    try:
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col])
+    except Exception as e:
+        raise ValueError(f"Error parsing timestamp column '{timestamp_col}': {e}")
+
+    # Rename timestamp column to standard name
+    if timestamp_col != "timestamp":
+        df = df.rename(columns={timestamp_col: "timestamp"})
+
+    # Create record_df (the main data)
+    record_df = df.copy()
+
+    # Create session_df (summary data - one row per file)
+    session_data = {
+        "filename": str(file_path.name),
+        "start_time": df["timestamp"].min(),
+        "end_time": df["timestamp"].max(),
+        "total_records": len(df),
+        "duration_seconds": (
+            df["timestamp"].max() - df["timestamp"].min()
+        ).total_seconds(),
+    }
+
+    # Add summary statistics for numeric columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for col in numeric_cols:
+        if col != "timestamp":  # Skip timestamp if it's numeric
+            session_data[f"{col}_avg"] = df[col].mean()
+            session_data[f"{col}_max"] = df[col].max()
+            session_data[f"{col}_min"] = df[col].min()
+
+    session_df = pd.DataFrame([session_data])
 
     return session_df, record_df
 
@@ -249,4 +333,5 @@ def get_raw_data_sample(
     numeric_columns = sample_df.select_dtypes(include=[np.number]).columns
     sample_df[numeric_columns] = sample_df[numeric_columns].round(3)
 
+    return sample_df
     return sample_df

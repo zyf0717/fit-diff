@@ -7,7 +7,7 @@ import pandas as pd
 from shiny import Inputs, Session, reactive
 from shiny.types import FileInfo
 
-from src.utils import process_fit
+from src.utils import process_file
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
             if file_info["name"] not in selected_files:
                 continue
             try:
-                _, record_df = process_fit(file_info["datapath"])
+                _, record_df = process_file(file_info["datapath"])
                 device_data[file_info["name"]] = record_df
             except Exception as e:
                 logger.error(
