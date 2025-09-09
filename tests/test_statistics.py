@@ -88,7 +88,13 @@ class TestGetBiasAgreementStats:
 
         # Check that expected metrics are present
         metrics = result["Metric"].tolist()
-        expected_metrics = ["Mean Bias", "Shapiro–Wilk p-value", "Cohen's d"]
+        expected_metrics = [
+            "Mean Bias",
+            "Paired t-test p-value",
+            "Wilcoxon signed-rank p-value",
+            "Sign test p-value",
+            "Cohen's d",
+        ]
         for metric in expected_metrics:
             assert any(metric in m for m in metrics)
 
