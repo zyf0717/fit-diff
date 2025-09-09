@@ -80,7 +80,11 @@ def get_bias_agreement_stats(
     bias = errors.mean()
     std_err = errors.std()
 
-    # Perform all three tests
+    # Two-sample K–S test
+    test_metric = aligned_df[f"{metric}_test"]
+    ref_metric = aligned_df[f"{metric}_ref"]
+    ks_stat, ks_p_val = stats.ks_2samp(test_metric, ref_metric)
+
     # Paired t-test
     t_stat, t_p_val = stats.ttest_1samp(errors, 0.0)
 
@@ -109,6 +113,7 @@ def get_bias_agreement_stats(
     # Assemble results
     rows = [
         ("Mean Bias", round(bias, 6)),
+        ("K–S test p-value", round(ks_p_val, 8)),
         ("Paired t-test p-value", round(t_p_val, 8)),
         ("Wilcoxon signed-rank p-value", round(w_p_val, 8)),
         (
