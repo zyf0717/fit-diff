@@ -47,43 +47,58 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     if "position_lat" in record_df.columns and "position_long" in record_df.columns:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
-    
+
     # Convert timestamp to string format matching CSV files (ISO format with 'Z' suffix)
     if "timestamp" in record_df.columns:
         # Convert to datetime if it's not already, then to string format
-        if record_df["timestamp"].dtype == 'object' and isinstance(record_df["timestamp"].iloc[0], str):
+        if record_df["timestamp"].dtype == "object" and isinstance(
+            record_df["timestamp"].iloc[0], str
+        ):
             # Already string, convert to datetime first
             record_df["timestamp"] = pd.to_datetime(record_df["timestamp"], utc=True)
-        
+
         # Ensure timezone-aware datetime, then convert to naive UTC and format as string
         if record_df["timestamp"].dt.tz is not None:
-            record_df["timestamp"] = record_df["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
-        
-        record_df["timestamp"] = record_df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    
+            record_df["timestamp"] = (
+                record_df["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
+            )
+
+        record_df["timestamp"] = record_df["timestamp"].dt.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
     record_df["filename"] = str(file_path.name)
 
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-    
+
     # Convert timestamp-related columns to string format matching CSV files
     for col in session_df.columns:
-        if "time" in col.lower() and session_df[col].dtype in ['object', 'datetime64[ns]', 'datetime64[ns, UTC]']:
+        if "time" in col.lower() and session_df[col].dtype in [
+            "object",
+            "datetime64[ns]",
+            "datetime64[ns, UTC]",
+        ]:
             try:
                 # Convert to datetime if needed, then to string format
-                if session_df[col].dtype == 'object':
+                if session_df[col].dtype == "object":
                     session_df[col] = pd.to_datetime(session_df[col], utc=True)
-                
+
                 # Ensure timezone-aware datetime, then convert to naive UTC and format as string
-                if hasattr(session_df[col].dtype, 'tz') and session_df[col].dt.tz is not None:
-                    session_df[col] = session_df[col].dt.tz_convert("UTC").dt.tz_localize(None)
-                
+                if (
+                    hasattr(session_df[col].dtype, "tz")
+                    and session_df[col].dt.tz is not None
+                ):
+                    session_df[col] = (
+                        session_df[col].dt.tz_convert("UTC").dt.tz_localize(None)
+                    )
+
                 session_df[col] = session_df[col].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             except:
                 # If conversion fails, leave as is
                 pass
-    
+
     session_df["filename"] = str(file_path.name)
 
     print(f"Processed FIT file: {file_path.name} with {len(record_df)} records")
