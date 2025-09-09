@@ -68,7 +68,7 @@ def calculate_basic_stats(
 def get_bias_agreement_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
-    """Get bias, agreement and normality-aware test selection."""
+    """Get bias and agreement statistics using multiple statistical tests."""
     if aligned_df is None or aligned_df.empty:
         return None
 
@@ -80,17 +80,28 @@ def get_bias_agreement_stats(
     bias = errors.mean()
     std_err = errors.std()
 
-    # Normality test: Shapiro–Wilk
-    _, sw_p = stats.shapiro(errors)
+    # Perform all three tests
+    # Paired t-test
+    t_stat, t_p_val = stats.ttest_1samp(errors, 0.0)
 
-    # Select inferential test
-    if sw_p > 0.05:
-        test_name = "Paired t-test"
-        t_stat, p_val = stats.ttest_1samp(errors, 0.0)
+    # Wilcoxon signed-rank test
+    # zero_method='wilcox' drops zero-differences for scipy ≥1.7
+    w_stat, w_p_val = stats.wilcoxon(errors, zero_method="wilcox")
+
+    # Sign test
+    # Count positive and negative differences (excluding zeros)
+    non_zero_errors = errors[errors != 0]
+    n_positive = (non_zero_errors > 0).sum()
+    n_negative = (non_zero_errors < 0).sum()
+    n_total = len(non_zero_errors)
+
+    if n_total > 0:
+        # Use binomial test (two-tailed)
+        sign_p_val = (
+            stats.binomtest(min(n_positive, n_negative), n_total, 0.5).pvalue * 2
+        )
     else:
-        test_name = "Wilcoxon signed-rank"
-        # zero_method='wilcox' drops zero-differences for scipy ≥1.7
-        t_stat, p_val = stats.wilcoxon(errors, zero_method="wilcox")
+        sign_p_val = np.nan
 
     # Effect size
     cohens_d = bias / std_err if std_err > 0 else np.nan
@@ -98,9 +109,12 @@ def get_bias_agreement_stats(
     # Assemble results
     rows = [
         ("Mean Bias", round(bias, 6)),
-        ("Shapiro–Wilk p-value", round(sw_p, 6)),
-        # (f"{test_name} statistic", round(t_stat, 6)),
-        (f"{test_name} p-value", round(p_val, 8)),
+        ("Paired t-test p-value", round(t_p_val, 8)),
+        ("Wilcoxon signed-rank p-value", round(w_p_val, 8)),
+        (
+            "Sign test p-value",
+            round(sign_p_val, 8) if not np.isnan(sign_p_val) else "N/A",
+        ),
         ("Cohen's d", round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A"),
     ]
 

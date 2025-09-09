@@ -127,9 +127,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                     ui.card(
                         ui.card_header("LLM Generated Summary"),
                         ui.layout_columns(
-                            ui.input_action_button(
-                                "llm_summary_regen", "Click to (re)generate"
-                            ),
+                            ui.input_action_button("llm_summary_regen", "Ask BotBot!"),
                             ui.output_markdown_stream(
                                 "streamOutput", auto_scroll=False
                             ),
@@ -233,9 +231,9 @@ def server(input: Inputs, output: Outputs, session: Session):
             "outlier_removal",
             "Outlier removal:",
             choices={
-                "remove_iqr": "Remove IQR outliers (1.5 × IQR)",
-                "remove_zscore": "Remove Z-score outliers (|z| > 3)",
-                "remove_percentile": "Remove percentile outliers (< 1% or > 99%)",
+                "remove_iqr": "IQR outliers (1.5 × IQR)",
+                "remove_zscore": "Z-score outliers (|z| > 3)",
+                "remove_percentile": "Percentile outliers (< 1% or > 99%)",
             },
             selected=[],
             multiple=True,
