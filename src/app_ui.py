@@ -7,7 +7,7 @@ app_ui = ui.page_fluid(
             ui.tags.script(
                 """
                 Shiny.addCustomMessageHandler("logout", function(_) {
-                    window.location.href = "https://fit-diff.yifei.sg/cdn-cgi/access/logout";
+                    window.location.href = "https://fit-diff.paperclipds.dev/cdn-cgi/access/logout";
                 });
                 """
             ),
