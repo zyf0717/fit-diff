@@ -3,7 +3,7 @@
 import logging
 
 import pandas as pd
-from shiny import Inputs, reactive, ui
+from shiny import Inputs, reactive, session, ui
 from shiny.types import SilentException
 
 from src.utils import (
@@ -121,13 +121,13 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
                 lambda: (
                     inputs.auto_shift_method()
                     if hasattr(inputs, "auto_shift_method")
-                    else "None"
+                    else "None (manual)"
                 ),
-                default="None",
+                default="None (manual)",
             )
 
             # If auto-shift is disabled, don't modify the input
-            if auto_shift_method == "None":
+            if "None" in auto_shift_method:
                 return
 
             test_data, ref_data = _get_trimmed_data()
@@ -146,6 +146,11 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
             if hasattr(inputs, "shift_seconds"):
                 try:
                     ui.update_numeric("shift_seconds", value=optimal_shift)
+                    logger.info(
+                        "Auto-set shift_seconds to %s based on %s",
+                        optimal_shift,
+                        auto_shift_method,
+                    )
                 except Exception as set_error:
                     logger.warning("Could not set shift_seconds input: %s", set_error)
 

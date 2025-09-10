@@ -12,21 +12,21 @@ from src.reactives_visualizations import create_visualization_reactives
 logger = logging.getLogger(__name__)
 
 
-def server(input: Inputs, output: Outputs, session: Session):
+def server(inputs: Inputs, output: Outputs, session: Session):
     # Create reactive groups
-    file_reactives = create_file_handling_reactives(input, session)
-    data_reactives = create_data_processing_reactives(input, file_reactives)
-    ui_reactives = create_ui_reactives(input, file_reactives, data_reactives)
-    visualization_reactives = create_visualization_reactives(input, data_reactives)
+    file_reactives = create_file_handling_reactives(inputs, session)
+    data_reactives = create_data_processing_reactives(inputs, file_reactives)
+    ui_reactives = create_ui_reactives(inputs, file_reactives, data_reactives)
+    visualization_reactives = create_visualization_reactives(inputs, data_reactives)
     statistics_reactives = create_statistics_reactives(
-        input, file_reactives, data_reactives
+        inputs, file_reactives, data_reactives
     )
 
     # Enable dynamic theme switching
     shinyswatch.theme_picker_server()
 
     @reactive.Effect
-    @reactive.event(input.logout)
+    @reactive.event(inputs.logout)
     async def _():
         await session.send_custom_message("logout", {})
 

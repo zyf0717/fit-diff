@@ -363,7 +363,7 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     """Determine optimal time shift in seconds to align test data to reference data."""
     if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
         return None
-    if auto_shift_method == "None":
+    if "None" in auto_shift_method:
         return 0
     if auto_shift_method not in [
         "Minimize MAE",
@@ -446,7 +446,7 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
             # Mean Squared Error (lower is better)
             return np.mean((test_values - ref_values) ** 2)
         elif auto_shift_method == "Maximize Correlation":
-            # Pearson correlation (higher is better, but we'll return negative for consistency)
+            # Pearson correlation (higher is better, but return negative for consistency)
             if len(test_values) < 2:
                 return None
             corr = np.corrcoef(test_values, ref_values)[0, 1]

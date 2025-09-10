@@ -2,7 +2,7 @@
 
 import logging
 
-from shiny import Inputs, reactive, render, ui
+from shiny import Inputs, reactive, render, session, ui
 from shinywidgets import output_widget
 
 logger = logging.getLogger(__name__)
@@ -59,12 +59,12 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                             "auto_shift_method",
                             "Auto-shift by:",
                             choices=[
-                                "None",
+                                "None (manual)",
                                 "Minimize MAE",
                                 "Minimize MSE",
                                 "Maximize Correlation",
                             ],
-                            selected="None",
+                            selected="None (manual)",
                         ),
                         col_widths=[3, 3, 3, 3],
                     ),
@@ -218,6 +218,30 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             step=1,
             update_on="blur",
         )
+
+    @reactive.Effect
+    async def _toggle_shift_seconds():
+        sess = session.get_current_session()
+        method = inputs.auto_shift_method()
+
+        # No controlling value yet → do nothing
+        if method is None:
+            return
+
+        async def send():
+            await sess.send_custom_message(
+                "toggle_disabled",
+                {"id": "shift_seconds", "disabled": "None" not in method},
+            )
+
+        # If the widget hasn't rendered yet (conditional main UI), delay once
+        if (
+            getattr(input, "shift_seconds", None) is None
+            or input.shift_seconds() is None
+        ):
+            sess.on_flushed(send, once=True)
+        else:
+            await send()
 
     return {
         "mainContent": mainContent,

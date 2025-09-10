@@ -45,6 +45,7 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
                             mode="lines",
                             name=f"{source_name}",
                             line=dict(width=2),
+                            opacity=0.75,
                         )
                     )
 
