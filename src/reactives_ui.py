@@ -34,7 +34,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         ui.output_ui("testFileSelector"),
                         ui.output_ui("refFileSelector"),
                         ui.output_ui("comparisonMetricSelector"),
-                        ui.output_ui("outlierRemovalSelector"),
+                        # ui.output_ui("outlierRemovalSelector"),
                         col_widths=[3, 3, 3, 3],
                     ),
                     ui.layout_columns(
