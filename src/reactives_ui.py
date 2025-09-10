@@ -2,7 +2,7 @@
 
 import logging
 
-from shiny import Inputs, render, ui
+from shiny import Inputs, reactive, render, ui
 from shinywidgets import output_widget
 
 logger = logging.getLogger(__name__)
@@ -39,13 +39,32 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.input_numeric(
-                            id="shift_seconds",
-                            label="Shift test data (seconds):",
+                            id="trim_from_start",
+                            label="Trim from start (seconds):",
                             value=0,
+                            min=0,
                             step=1,
                         ),
-                        ui.output_ui("analysisWindow"),
-                        col_widths=[3, 6],
+                        ui.input_numeric(
+                            id="trim_from_end",
+                            label="Trim from end (seconds):",
+                            value=0,
+                            min=0,
+                            step=1,
+                        ),
+                        ui.output_ui("shiftSecondsSelector"),
+                        ui.input_select(
+                            "auto_shift",
+                            "Auto-shift by:",
+                            choices=[
+                                "None",
+                                "Minimize MAE",
+                                "Minimize MSE",
+                                "Maximize Correlation",
+                            ],
+                            selected="None",
+                        ),
+                        col_widths=[3, 3, 3, 3],
                     ),
                     ui.layout_columns(
                         ui.card(
@@ -189,33 +208,12 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         )
 
     @render.ui
-    def analysisWindow():
-        def _create_analysis_window():
-            range_info = data_reactives["_get_elapsed_seconds_range"]()
-            if not range_info:
-                return None
-            return ui.layout_columns(
-                ui.input_numeric(
-                    id="analysis_window_start",
-                    label="Analysis window start (elapsed seconds):",
-                    value=range_info.get("min", 0),
-                    min=range_info.get("min", 0),
-                    max=range_info.get("max", 60),
-                    step=1,
-                ),
-                ui.input_numeric(
-                    id="analysis_window_end",
-                    label="Analysis window end (elapsed seconds):",
-                    value=range_info.get("max", 60),
-                    min=range_info.get("min", 0),
-                    max=range_info.get("max", 60),
-                    step=1,
-                ),
-                col_widths=[6, 6],
-            )
-
-        return data_reactives["_safe_execute"](
-            _create_analysis_window, "analysisWindow"
+    def shiftSecondsSelector():
+        return ui.input_numeric(
+            id="shift_seconds",
+            label="Shift test data (seconds):",
+            value=0,
+            step=1,
         )
 
     return {
@@ -224,5 +222,5 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         "refFileSelector": refFileSelector,
         "comparisonMetricSelector": comparisonMetricSelector,
         "outlierRemovalSelector": outlierRemovalSelector,
-        "analysisWindow": analysisWindow,
+        "shiftSecondsSelector": shiftSecondsSelector,
     }

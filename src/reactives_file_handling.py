@@ -5,7 +5,7 @@ from typing import List
 
 import pandas as pd
 from shiny import Inputs, Session, reactive
-from shiny.types import FileInfo
+from shiny.types import FileInfo, SilentException
 
 from src.utils import process_file
 
@@ -43,11 +43,23 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
 
     @reactive.Calc
     def _process_test_device_files():
-        return _process_device_files(inputs.testFileUpload(), "selected_test_files")
+        try:
+            return _process_device_files(inputs.testFileUpload(), "selected_test_files")
+        except SilentException:
+            return {}
+        except Exception as e:
+            logger.error("Error processing test files: %s", e, exc_info=True)
+            return {}
 
     @reactive.Calc
     def _process_reference_device_files():
-        return _process_device_files(inputs.refFileUpload(), "selected_ref_files")
+        try:
+            return _process_device_files(inputs.refFileUpload(), "selected_ref_files")
+        except SilentException:
+            return {}
+        except Exception as e:
+            logger.error("Error processing reference files: %s", e, exc_info=True)
+            return {}
 
     @reactive.Calc
     def _all_fit_data():

@@ -84,14 +84,18 @@ def create_statistics_reactives(
     @reactive.effect
     @reactive.event(inputs.llm_summary_regen)
     async def llm_summary_effect():
-        await md.stream(
-            generate_llm_summary_stream(
-                metric=inputs.comparison_metric(),
-                bias_stats=_get_bias_stats(),
-                error_stats=_get_error_stats(),
-                correlation_stats=_get_correlation_stats(),
+        try:
+            metric = data_reactives["_get_comparison_metric"]()
+            await md.stream(
+                generate_llm_summary_stream(
+                    metric=metric,
+                    bias_stats=_get_bias_stats(),
+                    error_stats=_get_error_stats(),
+                    correlation_stats=_get_correlation_stats(),
+                )
             )
-        )
+        except Exception as e:
+            logger.error("Error generating LLM summary: %s", e, exc_info=True)
 
     @render.data_frame
     def fileInfoTable():

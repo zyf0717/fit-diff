@@ -36,7 +36,6 @@ def server(input: Inputs, output: Outputs, session: Session):
     output.refFileSelector = ui_reactives["refFileSelector"]
     output.comparisonMetricSelector = ui_reactives["comparisonMetricSelector"]
     output.outlierRemovalSelector = ui_reactives["outlierRemovalSelector"]
-    output.analysisWindow = ui_reactives["analysisWindow"]
 
     # Register visualization reactives
     output.metricPlot = visualization_reactives["metricPlot"]
