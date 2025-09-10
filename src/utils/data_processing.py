@@ -41,6 +41,7 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         mesg_listener=None,
     )
 
+    ### Record data - one row per record message ###
     record_df = pd.json_normalize(messages.get("record_mesgs", []), sep="_")
     if record_df.empty:
         raise ValueError("No record messages found in FIT file")
@@ -48,57 +49,29 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
 
-    # Convert timestamp to string format matching CSV files (ISO format with 'Z' suffix)
+    # Keep timestamp as timezone-aware datetime
     if "timestamp" in record_df.columns:
-        # Convert to datetime if it's not already, then to string format
+        # Convert to datetime if it's not already
         if record_df["timestamp"].dtype == "object" and isinstance(
             record_df["timestamp"].iloc[0], str
         ):
             # Already string, convert to datetime first
             record_df["timestamp"] = pd.to_datetime(record_df["timestamp"], utc=True)
 
-        # Ensure timezone-aware datetime, then convert to naive UTC and format as string
-        if record_df["timestamp"].dt.tz is not None:
-            record_df["timestamp"] = (
-                record_df["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
-            )
-
-        record_df["timestamp"] = record_df["timestamp"].dt.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        # Ensure timezone-aware datetime in UTC
+        if record_df["timestamp"].dt.tz is None:
+            # If no timezone info, assume UTC
+            record_df["timestamp"] = record_df["timestamp"].dt.tz_localize("UTC")
+        else:
+            # Convert to UTC timezone
+            record_df["timestamp"] = record_df["timestamp"].dt.tz_convert("UTC")
 
     record_df["filename"] = str(file_path.name)
 
+    ### Session data - one row per file ###
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-
-    # Convert timestamp-related columns to string format matching CSV files
-    for col in session_df.columns:
-        if "time" in col.lower() and session_df[col].dtype in [
-            "object",
-            "datetime64[ns]",
-            "datetime64[ns, UTC]",
-        ]:
-            try:
-                # Convert to datetime if needed, then to string format
-                if session_df[col].dtype == "object":
-                    session_df[col] = pd.to_datetime(session_df[col], utc=True)
-
-                # Ensure timezone-aware datetime, then convert to naive UTC and format as string
-                if (
-                    hasattr(session_df[col].dtype, "tz")
-                    and session_df[col].dt.tz is not None
-                ):
-                    session_df[col] = (
-                        session_df[col].dt.tz_convert("UTC").dt.tz_localize(None)
-                    )
-
-                session_df[col] = session_df[col].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except:
-                # If conversion fails, leave as is
-                pass
-
     session_df["filename"] = str(file_path.name)
 
     return session_df, record_df
@@ -124,32 +97,26 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if col.lower() in ["timestamp", "datetime", "time_stamp", "date_time", "time"]
     ]
 
+    if not timestamp_cols:
+        raise ValueError("No timestamp column found")
+
     # Use the first timestamp column found
     timestamp_col = timestamp_cols[0]
 
-    # Convert timestamp column to datetime
+    # Convert timestamp column to timezone-aware datetime
     try:
         # First, try to parse as datetime
         df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors="raise")
 
         # Check if timezone info is present or if we need to assume GMT+8
         if df[timestamp_col].dt.tz is None:
-            # No timezone info - assume GMT+8 and convert to UTC
+            # No timezone info: assume GMT+8 and convert to UTC
             df[timestamp_col] = (
                 df[timestamp_col].dt.tz_localize("Asia/Singapore").dt.tz_convert("UTC")
             )
         else:
             # Timezone info present - convert to UTC
             df[timestamp_col] = df[timestamp_col].dt.tz_convert("UTC")
-
-        # Remove timezone info to keep as naive UTC datetime
-        df[timestamp_col] = df[timestamp_col].dt.tz_localize(None)
-
-        # Convert to string format matching FIT files (ISO format with 'Z' suffix)
-        timestamps_dt = df[timestamp_col].copy()  # Keep for calculations
-        df[timestamp_col] = df[timestamp_col].dt.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )  # ISO format, standardized with FIT files
 
     except Exception as e:
         raise ValueError(f"Error parsing timestamp column '{timestamp_col}': {e}")
@@ -164,10 +131,12 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Create session_df (summary data - one row per file)
     session_data = {
         "filename": str(file_path.name),
-        "start_time": df["timestamp"].min(),  # Keep as string for consistency with FIT
-        "end_time": df["timestamp"].max(),  # Keep as string for consistency with FIT
+        "start_time": df["timestamp"].min(),  # Keep as timezone-aware datetime
+        "end_time": df["timestamp"].max(),  # Keep as timezone-aware datetime
         "total_records": len(df),
-        "duration_seconds": (timestamps_dt.max() - timestamps_dt.min()).total_seconds(),
+        "duration_seconds": (
+            df["timestamp"].max() - df["timestamp"].min()
+        ).total_seconds(),
     }
 
     # Add summary statistics for numeric columns
@@ -226,7 +195,7 @@ def prepare_data_for_analysis(
     # Each file starts at elapsed_seconds = 0 from its own first timestamp (after filtering)
     for df in [test_data_df, ref_data_df]:
         df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
-            lambda x: (pd.to_datetime(x) - pd.to_datetime(x.min())).dt.total_seconds()
+            lambda x: (x - x.min()).dt.total_seconds()
         )
 
     return test_data_df, ref_data_df

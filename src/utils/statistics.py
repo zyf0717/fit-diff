@@ -113,7 +113,7 @@ def get_bias_agreement_stats(
     # Assemble results
     rows = [
         ("Mean Bias", round(bias, 6)),
-        ("K–S test p-value", round(ks_p_val, 8)),
+        ("Two-sample K–S test p-value", round(ks_p_val, 8)),
         ("Paired t-test p-value", round(t_p_val, 8)),
         ("Wilcoxon signed-rank p-value", round(w_p_val, 8)),
         (

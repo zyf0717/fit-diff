@@ -38,11 +38,9 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         col_widths=[3, 3, 3, 3],
                     ),
                     ui.layout_columns(
-                        ui.input_slider(
+                        ui.input_numeric(
                             id="shift_seconds",
                             label="Shift test data (seconds):",
-                            min=-15,
-                            max=15,
                             value=0,
                             step=1,
                         ),

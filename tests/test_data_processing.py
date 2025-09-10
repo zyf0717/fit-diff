@@ -157,10 +157,10 @@ class TestProcessFit:
         assert "filename" in session_df.columns
         assert record_df["filename"].iloc[0] == "test.csv"
         assert "timestamp" in record_df.columns
-        # Timestamps should now be strings in ISO format to match FIT files
-        assert record_df["timestamp"].dtype == "object"
-        assert all(isinstance(ts, str) for ts in record_df["timestamp"])
-        assert all("T" in ts and ts.endswith("Z") for ts in record_df["timestamp"])
+        # Timestamps should now be timezone-aware datetime objects
+        assert str(record_df["timestamp"].dtype) == "datetime64[ns, UTC]"
+        assert all(isinstance(ts, pd.Timestamp) for ts in record_df["timestamp"])
+        assert all(ts.tz is not None for ts in record_df["timestamp"])
 
     @patch("src.utils.data_processing.pd.read_csv")
     def test_process_csv_no_timestamp(self, mock_read_csv):
@@ -200,15 +200,20 @@ class TestProcessFit:
         # Test
         session_df, record_df = process_file("test.csv")
 
-        # Verify timestamps are converted (GMT+8 12:00 becomes UTC 04:00) and formatted as strings
-        expected_utc_strings = [
-            "2023-01-01T04:00:00Z",
-            "2023-01-01T05:00:00Z",
-            "2023-01-01T06:00:00Z",
-        ]
+        # Verify timestamps are converted (GMT+8 12:00 becomes UTC 04:00) and kept as datetime objects
+        expected_utc_datetimes = pd.Series(
+            pd.to_datetime(
+                [
+                    "2023-01-01T04:00:00Z",
+                    "2023-01-01T05:00:00Z",
+                    "2023-01-01T06:00:00Z",
+                ],
+                utc=True,
+            )
+        )
         pd.testing.assert_series_equal(
             record_df["timestamp"].reset_index(drop=True),
-            pd.Series(expected_utc_strings).reset_index(drop=True),
+            expected_utc_datetimes.reset_index(drop=True),
             check_names=False,
         )
 
