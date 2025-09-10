@@ -44,6 +44,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                             value=0,
                             min=0,
                             step=1,
+                            update_on="blur",
                         ),
                         ui.input_numeric(
                             id="trim_from_end",
@@ -51,6 +52,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                             value=0,
                             min=0,
                             step=1,
+                            update_on="blur",
                         ),
                         ui.output_ui("shiftSecondsSelector"),
                         ui.input_select(
@@ -214,6 +216,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             label="Shift test data (seconds):",
             value=0,
             step=1,
+            update_on="blur",
         )
 
     return {

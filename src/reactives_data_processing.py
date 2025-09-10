@@ -279,5 +279,4 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
         "_get_comparison_metric": _get_comparison_metric,
         "_safe_get_input": _safe_get_input,
         "_set_optimal_shift": _set_optimal_shift,
-        "_reset_auto_shift_on_manual_change": _reset_auto_shift_on_manual_change,
     }
