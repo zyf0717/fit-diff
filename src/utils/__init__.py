@@ -21,6 +21,7 @@ from .llm_integration import generate_llm_summary_stream
 # Statistical analysis functions
 from .statistics import (
     calculate_basic_stats,
+    calculate_ccc,
     get_bias_agreement_stats,
     get_correlation_stats,
     get_error_magnitude_stats,
@@ -44,6 +45,7 @@ __all__ = [
     "get_raw_data_sample",
     # Statistics
     "calculate_basic_stats",
+    "calculate_ccc",
     "get_bias_agreement_stats",
     "get_error_magnitude_stats",
     "get_correlation_stats",

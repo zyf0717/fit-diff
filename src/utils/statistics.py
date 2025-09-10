@@ -156,6 +156,43 @@ def get_error_magnitude_stats(
     return df
 
 
+def calculate_ccc(x: pd.Series, y: pd.Series) -> float:
+    """
+    Calculate the Concordance Correlation Coefficient (CCC) using Lin's formula.
+
+    The CCC measures the agreement between two continuous variables.
+    CCC = 2 * r * σx * σy / (σx² + σy² + (μx - μy)²)
+
+    Args:
+        x: First series of values
+        y: Second series of values
+
+    Returns:
+        CCC value between -1 and 1, where 1 indicates perfect agreement
+    """
+    if x.empty or y.empty or len(x) != len(y):
+        return 0.0
+
+    # Calculate means and variances
+    mean_x = x.mean()
+    mean_y = y.mean()
+    var_x = x.var()
+    var_y = y.var()
+
+    # Pearson correlation coefficient
+    pearson_r = x.corr(y)
+
+    # Handle edge cases
+    if pd.isna(pearson_r) or var_x == 0 or var_y == 0:
+        return 0.0
+
+    # CCC formula: CCC = 2 * r * σx * σy / (σx² + σy² + (μx - μy)²)
+    numerator = 2 * pearson_r * np.sqrt(var_x) * np.sqrt(var_y)
+    denominator = var_x + var_y + (mean_x - mean_y) ** 2
+
+    return numerator / denominator if denominator != 0 else 0.0
+
+
 def get_correlation_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
@@ -166,13 +203,19 @@ def get_correlation_stats(
     test_aligned = aligned_df[f"{metric}_test"]
     ref_aligned = aligned_df[f"{metric}_ref"]
 
-    # Calculate correlation metrics
-    correlation = test_aligned.corr(ref_aligned)
+    # Calculate Concordance Correlation Coefficient (CCC)
+    ccc = calculate_ccc(test_aligned, ref_aligned)
+
+    # Pearson correlation coefficient
+    pearson_r = test_aligned.corr(ref_aligned)
+
+    # Calculate p-value for Pearson correlation (for reference)
     _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
 
     correlation_stats = {
-        "Correlation Coefficient": round(correlation, 6),
-        "Correlation P-value": round(r_p_value, 8),
+        "Concordance Correlation Coefficient": round(ccc, 6),
+        "Pearson Correlation Coefficient": round(pearson_r, 6),
+        "Pearson Correlation P-value": round(r_p_value, 8),
     }
 
     # Convert to transposed DataFrame

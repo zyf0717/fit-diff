@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from garmin_fit_sdk import Decoder, Stream
 
+from .statistics import calculate_ccc
+
 
 def process_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -365,12 +367,6 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
         return None
     if "None" in auto_shift_method:
         return 0
-    if auto_shift_method not in [
-        "Minimize MAE",
-        "Minimize MSE",
-        "Maximize Correlation",
-    ]:
-        return 0
 
     # Check if required columns exist
     if metric not in test_data.columns or metric not in ref_data.columns:
@@ -445,8 +441,10 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
         elif auto_shift_method == "Minimize MSE":
             # Mean Squared Error (lower is better)
             return np.mean((test_values - ref_values) ** 2)
-        elif auto_shift_method == "Maximize Correlation":
-            # Pearson correlation (higher is better, but return negative for consistency)
+        elif auto_shift_method == "Maximize Concordance Correlation":
+            return -calculate_ccc(test_values, ref_values)
+        elif auto_shift_method == "Maximize Pearson Correlation":
+            # Higher is better, return negative for consistency
             if len(test_values) < 2:
                 return None
             corr = np.corrcoef(test_values, ref_values)[0, 1]

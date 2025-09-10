@@ -8,6 +8,7 @@ import pytest
 
 from src.utils import (
     calculate_basic_stats,
+    calculate_ccc,
     get_bias_agreement_stats,
     get_correlation_stats,
     get_error_magnitude_stats,
@@ -58,6 +59,65 @@ class TestCalculateBasicStats:
         # Test with empty dataframe
         empty_df = pd.DataFrame()
         assert calculate_basic_stats(empty_df, "heart_rate") is None
+
+
+class TestCalculateCCC:
+    """Test cases for calculate_ccc function."""
+
+    def test_calculate_ccc_perfect_agreement(self):
+        """Test CCC with perfect agreement."""
+        x = pd.Series([1, 2, 3, 4, 5])
+        y = pd.Series([1, 2, 3, 4, 5])
+
+        result = calculate_ccc(x, y)
+
+        assert result == 1.0
+
+    def test_calculate_ccc_high_agreement(self):
+        """Test CCC with high agreement."""
+        x = pd.Series([1.0, 2.1, 2.9, 4.1, 4.9])
+        y = pd.Series([1, 2, 3, 4, 5])
+
+        result = calculate_ccc(x, y)
+
+        # Should be close to 1 but not perfect
+        assert 0.99 <= result <= 1.0
+
+    def test_calculate_ccc_negative_agreement(self):
+        """Test CCC with negative correlation."""
+        x = pd.Series([1, 2, 3, 4, 5])
+        y = pd.Series([5, 4, 3, 2, 1])
+
+        result = calculate_ccc(x, y)
+
+        assert result == -1.0
+
+    def test_calculate_ccc_no_agreement(self):
+        """Test CCC with uncorrelated data."""
+        x = pd.Series([1, 2, 3, 4, 5])
+        y = pd.Series([3, 1, 4, 2, 5])
+
+        result = calculate_ccc(x, y)
+
+        # Should be close to 0 (less than perfect agreement)
+        assert abs(result) <= 0.5
+
+    def test_calculate_ccc_invalid_input(self):
+        """Test with invalid input."""
+        # Empty series
+        empty_x = pd.Series([])
+        empty_y = pd.Series([])
+        assert calculate_ccc(empty_x, empty_y) == 0.0
+
+        # Mismatched lengths
+        x = pd.Series([1, 2, 3])
+        y = pd.Series([1, 2])
+        assert calculate_ccc(x, y) == 0.0
+
+        # Constant values (zero variance)
+        const_x = pd.Series([3, 3, 3, 3])
+        const_y = pd.Series([3, 3, 3, 3])
+        assert calculate_ccc(const_x, const_y) == 0.0
 
 
 class TestGetBiasAgreementStats:
@@ -167,7 +227,11 @@ class TestGetCorrelationStats:
 
         # Check that expected metrics are present
         metrics = result["Metric"].tolist()
-        expected_metrics = ["Correlation Coefficient", "Correlation P-value"]
+        expected_metrics = [
+            "Concordance Correlation Coefficient",
+            "Pearson Correlation Coefficient",
+            "Pearson Correlation P-value",
+        ]
         assert all(metric in metrics for metric in expected_metrics)
 
     def test_get_correlation_stats_invalid_input(self):
