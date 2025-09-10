@@ -357,3 +357,119 @@ def get_raw_data_sample(
     sample_df[numeric_columns] = sample_df[numeric_columns].round(3)
 
     return sample_df
+
+
+def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
+    """Determine optimal time shift in seconds to align test data to reference data."""
+    if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
+        return None
+    if auto_shift_method == "None":
+        return 0
+    if auto_shift_method not in [
+        "Minimize MAE",
+        "Minimize MSE",
+        "Maximize Correlation",
+    ]:
+        return 0
+
+    # Check if required columns exist
+    if metric not in test_data.columns or metric not in ref_data.columns:
+        return 0
+    if "timestamp" not in test_data.columns or "timestamp" not in ref_data.columns:
+        return 0
+
+    # Calculate adaptive search parameters based on data range
+    test_time_range = test_data["timestamp"].max() - test_data["timestamp"].min()
+    ref_time_range = ref_data["timestamp"].max() - ref_data["timestamp"].min()
+    max_overlap_range = max(
+        test_time_range.total_seconds(), ref_time_range.total_seconds()
+    )
+
+    # Set max shift to 10% of the maximum overlapping range, minimum 10 seconds
+    max_shift_seconds = max(10, int(max_overlap_range * 0.1))
+
+    # Determine step size based on timestamp resolution
+    # Calculate typical time intervals in the data
+    test_intervals = test_data["timestamp"].diff().dropna()
+    ref_intervals = ref_data["timestamp"].diff().dropna()
+
+    if not test_intervals.empty and not ref_intervals.empty:
+        # Use the most common interval as step size, but ensure it's at least 1 second
+        test_step = (
+            test_intervals.mode().iloc[0].total_seconds()
+            if not test_intervals.mode().empty
+            else 1
+        )
+        ref_step = (
+            ref_intervals.mode().iloc[0].total_seconds()
+            if not ref_intervals.mode().empty
+            else 1
+        )
+        step_size = max(1, int(min(test_step, ref_step)))
+    else:
+        step_size = 1  # Fallback to 1 second
+
+    best_shift = 0
+    best_score = None
+
+    # Function to calculate metric score for a given shift
+    def calculate_score(shift_seconds):
+        # Create shifted test data
+        test_shifted = test_data.copy()
+        test_shifted["timestamp"] = test_shifted["timestamp"] + pd.to_timedelta(
+            shift_seconds, unit="s"
+        )
+
+        # Merge on timestamp to align data
+        merged = pd.merge(
+            test_shifted[["timestamp", metric]],
+            ref_data[["timestamp", metric]],
+            on="timestamp",
+            suffixes=("_test", "_ref"),
+        )
+
+        if merged.empty:
+            return None
+
+        # Clean data - remove NaN values
+        merged_clean = merged.dropna(subset=[f"{metric}_test", f"{metric}_ref"])
+        if merged_clean.empty:
+            return None
+
+        test_values = merged_clean[f"{metric}_test"]
+        ref_values = merged_clean[f"{metric}_ref"]
+
+        if auto_shift_method == "Minimize MAE":
+            # Mean Absolute Error (lower is better)
+            return np.mean(np.abs(test_values - ref_values))
+        elif auto_shift_method == "Minimize MSE":
+            # Mean Squared Error (lower is better)
+            return np.mean((test_values - ref_values) ** 2)
+        elif auto_shift_method == "Maximize Correlation":
+            # Pearson correlation (higher is better, but we'll return negative for consistency)
+            if len(test_values) < 2:
+                return None
+            corr = np.corrcoef(test_values, ref_values)[0, 1]
+            return -corr if not np.isnan(corr) else None
+
+    # Start from 0 and expand outwards using adaptive step size
+    shifts_to_try = [0]  # Start with no shift
+    current_step = step_size
+    while current_step <= max_shift_seconds:
+        shifts_to_try.extend(
+            [current_step, -current_step]
+        )  # Add positive and negative shifts
+        current_step += step_size
+
+    # Find the best shift
+    for shift in shifts_to_try:
+        score = calculate_score(shift)
+
+        if score is not None:
+            if (
+                best_score is None or score < best_score
+            ):  # Lower is better for all our metrics
+                best_score = score
+                best_shift = shift
+
+    return best_shift

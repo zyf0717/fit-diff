@@ -54,7 +54,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         ),
                         ui.output_ui("shiftSecondsSelector"),
                         ui.input_select(
-                            "auto_shift",
+                            "auto_shift_method",
                             "Auto-shift by:",
                             choices=[
                                 "None",

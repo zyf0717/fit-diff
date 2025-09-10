@@ -24,7 +24,7 @@ def create_statistics_reactives(
     """Create statistics and table reactive functions."""
 
     def _get_stats():
-        aligned_data = data_reactives["_get_validated_aligned_data"]()
+        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
         return calculate_basic_stats(
@@ -32,7 +32,7 @@ def create_statistics_reactives(
         )
 
     def _get_bias_stats():
-        aligned_data = data_reactives["_get_validated_aligned_data"]()
+        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_bias_agreement_stats(
@@ -40,7 +40,7 @@ def create_statistics_reactives(
         )
 
     def _get_error_stats():
-        aligned_data = data_reactives["_get_validated_aligned_data"]()
+        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_error_magnitude_stats(
@@ -48,7 +48,7 @@ def create_statistics_reactives(
         )
 
     def _get_correlation_stats():
-        aligned_data = data_reactives["_get_validated_aligned_data"]()
+        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_correlation_stats(

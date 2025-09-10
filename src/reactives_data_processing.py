@@ -3,10 +3,14 @@
 import logging
 
 import pandas as pd
-from shiny import Inputs, reactive
+from shiny import Inputs, reactive, ui
 from shiny.types import SilentException
 
-from src.utils import prepare_data_for_analysis, remove_outliers
+from src.utils import (
+    determine_optimal_shift,
+    prepare_data_for_analysis,
+    remove_outliers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +112,45 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
         except Exception as e:
             logger.error("Error in _get_trimmed_data: %s", e, exc_info=True)
             return pd.DataFrame(), pd.DataFrame()
+
+    @reactive.Effect
+    def _set_optimal_shift():
+        """Calculate and apply optimal shift when auto-shift method is enabled."""
+        try:
+            auto_shift_method = _safe_get_input(
+                lambda: (
+                    inputs.auto_shift_method()
+                    if hasattr(inputs, "auto_shift_method")
+                    else "None"
+                ),
+                default="None",
+            )
+
+            # If auto-shift is disabled, don't modify the input
+            if auto_shift_method == "None":
+                return
+
+            test_data, ref_data = _get_trimmed_data()
+            if test_data.empty or ref_data.empty:
+                return
+
+            metric = _get_comparison_metric()
+
+            # Calculate optimal shift
+            seconds_to_shift = determine_optimal_shift(
+                test_data, ref_data, metric, auto_shift_method
+            )
+            optimal_shift = seconds_to_shift if seconds_to_shift is not None else 0
+
+            # Update the shift_seconds input with the calculated value
+            if hasattr(inputs, "shift_seconds"):
+                try:
+                    ui.update_numeric("shift_seconds", value=optimal_shift)
+                except Exception as set_error:
+                    logger.warning("Could not set shift_seconds input: %s", set_error)
+
+        except Exception as e:
+            logger.error("Error in _set_optimal_shift: %s", e, exc_info=True)
 
     @reactive.Calc
     def _get_shifted_data():
@@ -216,13 +259,6 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
             logger.error("Error in %s: %s", func_name, e, exc_info=True)
             return default_return
 
-    def _get_validated_aligned_data():
-        """Get validated aligned data or return None if invalid."""
-        aligned_data = _get_aligned_data_with_outlier_removal()
-        if aligned_data is None or aligned_data.empty:
-            return None
-        return aligned_data
-
     def _get_comparison_metric():
         """Get comparison metric with fallback to 'heart_rate'."""
         metric = _safe_get_input(
@@ -240,7 +276,8 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
         "_get_trimmed_data": _get_trimmed_data,
         "_get_aligned_data_with_outlier_removal": _get_aligned_data_with_outlier_removal,
         "_safe_execute": _safe_execute,
-        "_get_validated_aligned_data": _get_validated_aligned_data,
         "_get_comparison_metric": _get_comparison_metric,
         "_safe_get_input": _safe_get_input,
+        "_set_optimal_shift": _set_optimal_shift,
+        "_reset_auto_shift_on_manual_change": _reset_auto_shift_on_manual_change,
     }

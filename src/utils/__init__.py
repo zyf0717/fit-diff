@@ -7,6 +7,7 @@ from the separate modules.
 
 # Data processing functions
 from .data_processing import (
+    determine_optimal_shift,
     get_file_information,
     get_raw_data_sample,
     prepare_data_for_analysis,
@@ -35,6 +36,7 @@ from .visualizations import (
 
 __all__ = [
     # Data processing
+    "determine_optimal_shift",
     "process_file",
     "prepare_data_for_analysis",
     "remove_outliers",
