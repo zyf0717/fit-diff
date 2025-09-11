@@ -144,51 +144,75 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
                     )
                     return pd.DataFrame(), pd.DataFrame()
 
-            # Safely get trim time from start and/or end and treat non-int as 0
-            trim_start = _safe_get_input(
+            # Time range filtering (absolute elapsed_seconds window)
+            raw_start = _safe_get_input(
                 lambda: (
-                    int(inputs.trim_from_start() or 0)
-                    if hasattr(inputs, "trim_from_start")
-                    else 0
+                    inputs.time_range_start()
+                    if hasattr(inputs, "time_range_start")
+                    else None
                 ),
-                default=0,
+                default=None,
             )
-            trim_end = _safe_get_input(
+            raw_end = _safe_get_input(
                 lambda: (
-                    int(inputs.trim_from_end() or 0)
-                    if hasattr(inputs, "trim_from_end")
-                    else 0
+                    inputs.time_range_end()
+                    if hasattr(inputs, "time_range_end")
+                    else None
                 ),
-                default=0,
+                default=None,
             )
 
-            if trim_start == 0 and trim_end == 0:
-                # If no trimming is specified, return the full data
+            def _coerce(v):
+                try:
+                    if v is None or v == "":
+                        return None
+                    return int(v)
+                except (TypeError, ValueError):
+                    return None
+
+            start_time = _coerce(raw_start)
+            end_time = _coerce(raw_end)
+
+            # If neither bound supplied, keep full range
+            if start_time is None and end_time is None:
                 return test_data, ref_data
 
-            # Get the actual data range for each dataset
-            test_min = test_data["elapsed_seconds"].min()
-            test_max = test_data["elapsed_seconds"].max()
-            ref_min = ref_data["elapsed_seconds"].min()
-            ref_max = ref_data["elapsed_seconds"].max()
+            # Derive dataset max if only start provided etc.
+            overall_min = min(
+                test_data["elapsed_seconds"].min(), ref_data["elapsed_seconds"].min()
+            )
+            overall_max = max(
+                test_data["elapsed_seconds"].max(), ref_data["elapsed_seconds"].max()
+            )
 
-            # Calculate trim boundaries for each dataset
-            test_start_boundary = test_min + trim_start
-            test_end_boundary = test_max - trim_end
-            ref_start_boundary = ref_min + trim_start
-            ref_end_boundary = ref_max - trim_end
+            if start_time is None:
+                start_time = overall_min
+            if end_time is None:
+                end_time = overall_max
 
-            # Trim data based on relative start/end positions
+            before_counts = (len(test_data), len(ref_data))
             test_data = test_data[
-                (test_data["elapsed_seconds"] >= test_start_boundary)
-                & (test_data["elapsed_seconds"] <= test_end_boundary)
+                (test_data["elapsed_seconds"] >= start_time)
+                & (test_data["elapsed_seconds"] <= end_time)
             ]
             ref_data = ref_data[
-                (ref_data["elapsed_seconds"] >= ref_start_boundary)
-                & (ref_data["elapsed_seconds"] <= ref_end_boundary)
+                (ref_data["elapsed_seconds"] >= start_time)
+                & (ref_data["elapsed_seconds"] <= end_time)
             ]
-
+            logger.info(
+                "Applied time range filter: [%s, %s] seconds (kept test %s/%s, ref %s/%s)",
+                start_time,
+                end_time,
+                len(test_data),
+                before_counts[0],
+                len(ref_data),
+                before_counts[1],
+            )
+            if test_data.empty or ref_data.empty:
+                logger.info("Time range filtering resulted in empty dataset")
+                return pd.DataFrame(), pd.DataFrame()
             return test_data, ref_data
+
         except Exception as e:
             logger.error("Error in _get_trimmed_data: %s", e, exc_info=True)
             return pd.DataFrame(), pd.DataFrame()

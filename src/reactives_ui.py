@@ -62,17 +62,17 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.input_numeric(
-                            id="trim_from_start",
-                            label="Trim from start (seconds):",
-                            value=0,
+                            id="time_range_start",
+                            label="Start time (elapsed seconds):",
+                            value=None,
                             min=0,
                             step=1,
                             update_on="blur",
                         ),
                         ui.input_numeric(
-                            id="trim_from_end",
-                            label="Trim from end (seconds):",
-                            value=0,
+                            id="time_range_end",
+                            label="End time (elapsed seconds):",
+                            value=None,
                             min=0,
                             step=1,
                             update_on="blur",
