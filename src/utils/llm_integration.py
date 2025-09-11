@@ -59,17 +59,18 @@ async def generate_llm_summary_stream(
                 "You are a precise data analyst. Reason logically and explain to non-technical readers in plain language.\n"
                 "OUTPUT RULES:\n"
                 "- Return ONLY a valid Markdown snippet.\n"
-                "- Around 200 words, no preamble, no code fences, no quotes.\n"
+                "- Around 300 words, no preamble, no code fences, no quotes.\n"
                 "- Preserve all numbers EXACTLY as given (no rounding, no unit changes, no re-computation).\n"
                 "- Use bullet points for key statistics and numeric ranges.\n"
                 "- Focus on stats that materially influence the verdict; caveat clearly if anything is an inference.\n"
+                "- Explain what the metrics mean in simple terms.\n"
                 "- Always end with a **Verdict:** …"
             ),
         },
         {
             "role": "user",
             "content": (
-                "Interpret the following JSON benchmark stats for wearable-device benchmarking of "
+                "Interpret the following JSON stats for wearable-device benchmarking of "
                 f"{records.get('benchmark_metric', '')}. Consider these sources where present: "
                 "bias, error magnitude (MAE, RMSE), correlation, significance tests.\n\n"
                 "Produce a concise dashboard-style summary as instructed above.\n\n"
@@ -103,7 +104,6 @@ async def generate_llm_summary_stream(
                     break
                 try:
                     obj = json.loads(data)
-                    last_obj = obj
                     delta = obj.get("choices", [{}])[0].get("delta", {})
                     chunk = delta.get("content")
                     if chunk:
