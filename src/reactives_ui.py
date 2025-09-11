@@ -34,6 +34,29 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         ui.output_ui("testFileSelector"),
                         ui.output_ui("refFileSelector"),
                         ui.output_ui("comparisonMetricSelector"),
+                        ui.layout_columns(
+                            ui.input_select(
+                                "metric_range",
+                                "Select metric range:",
+                                choices=["All", "Range", "HR ≈ step cadence"],
+                                selected="All",
+                            ),
+                            ui.input_numeric(
+                                id="metric_range_lower",
+                                label="Lower:",
+                                value=None,
+                                step=1,
+                                update_on="blur",
+                            ),
+                            ui.input_numeric(
+                                id="metric_range_upper",
+                                label="Upper:",
+                                value=None,
+                                step=1,
+                                update_on="blur",
+                            ),
+                            col_widths=[6, 3, 3],
+                        ),
                         # ui.output_ui("outlierRemovalSelector"),
                         col_widths=[3, 3, 3, 3],
                     ),
@@ -96,7 +119,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         col_widths=[4, 4, 4],
                     ),
                     ui.card(
-                        ui.card_header("LLM Generated Summary"),
+                        ui.card_header("LLM Generated Explanation"),
                         ui.layout_columns(
                             ui.input_action_button("llm_summary_regen", "Ask BotBot!"),
                             ui.output_markdown_stream(
@@ -237,8 +260,39 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
         # If the widget hasn't rendered yet (conditional main UI), delay once
         if (
-            getattr(input, "shift_seconds", None) is None
-            or input.shift_seconds() is None
+            getattr(inputs, "shift_seconds", None) is None
+            or inputs.shift_seconds() is None
+        ):
+            sess.on_flushed(send, once=True)
+        else:
+            await send()
+
+    # Disable and grey out metric range lower/upper inputs if 'All' is selected
+    @reactive.Effect
+    async def _toggle_metric_range_inputs():
+        sess = session.get_current_session()
+        selection = inputs.metric_range()
+
+        if selection is None:
+            return
+
+        async def send():
+            disabled = selection == "All"
+            await sess.send_custom_message(
+                "toggle_disabled",
+                {"id": "metric_range_lower", "disabled": disabled},
+            )
+            await sess.send_custom_message(
+                "toggle_disabled",
+                {"id": "metric_range_upper", "disabled": disabled},
+            )
+
+        # Defer if the numeric inputs not yet rendered
+        if (
+            getattr(inputs, "metric_range_lower", None) is None
+            or inputs.metric_range_lower() is None
+            or getattr(inputs, "metric_range_upper", None) is None
+            or inputs.metric_range_upper() is None
         ):
             sess.on_flushed(send, once=True)
         else:
