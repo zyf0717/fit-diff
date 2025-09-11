@@ -150,7 +150,7 @@ def create_statistics_reactives(
 
     return {
         "_get_stats": _get_stats,
-        "_get_reliability_stats": _get_reliability_stats,
+        "_get_validity_stats": _get_validity_stats,
         "_get_precision_stats": _get_precision_stats,
         "_get_reliability_stats": _get_reliability_stats,
         "basicStatsTable": basicStatsTable,

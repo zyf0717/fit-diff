@@ -83,7 +83,7 @@ def get_validity_stats(
     # Two-sample K–S test
     test_metric = aligned_df[f"{metric}_test"]
     ref_metric = aligned_df[f"{metric}_ref"]
-    # ks_stat, ks_p_val = stats.ks_2samp(test_metric, ref_metric)
+    ks_stat, ks_p_val = stats.ks_2samp(test_metric, ref_metric)
 
     # Paired t-test
     t_stat, t_p_val = stats.ttest_1samp(errors, 0.0)
