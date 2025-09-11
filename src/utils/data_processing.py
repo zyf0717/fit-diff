@@ -171,9 +171,24 @@ def prepare_data_for_analysis(
 
     required_cols = ["timestamp", "filename", metric]
 
-    # Filter to required columns
-    test_data_df = test_data_df[required_cols].copy()
-    ref_data_df = ref_data_df[required_cols].copy()
+    # Supplementary cadence column needed by downstream filters (e.g. HR ≈ 2 × cadence)
+    supplementary = []
+    if "cadence" in test_data_df.columns and metric == "heart_rate":
+        supplementary.append("cadence")
+
+    # Build final column lists per dataframe guarding for missing columns
+    def _final_cols(df):
+        cols = []
+        for c in required_cols + supplementary:
+            if c in df.columns and c not in cols:
+                cols.append(c)
+        return cols
+
+    test_cols = _final_cols(test_data_df)
+    ref_cols = _final_cols(ref_data_df)
+
+    test_data_df = test_data_df[test_cols].copy()
+    ref_data_df = ref_data_df[ref_cols].copy()
 
     # Ensure filename is string type
     test_data_df["filename"] = test_data_df["filename"].astype(str)

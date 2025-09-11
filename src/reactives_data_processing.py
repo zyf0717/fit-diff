@@ -3,7 +3,7 @@
 import logging
 
 import pandas as pd
-from shiny import Inputs, reactive, session, ui
+from shiny import Inputs, reactive, ui
 from shiny.types import SilentException
 
 from src.utils import (
@@ -64,7 +64,87 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
             if test_data.empty or ref_data.empty:
                 return pd.DataFrame(), pd.DataFrame()
 
-            # Safely get trim parameters and treat non-int as 0
+            # Comparison metric (needed for range filters)
+            metric = _get_comparison_metric()
+
+            # Metric range limiting & special HR≈cadence logic applied BEFORE shifting
+            metric_range_mode = _safe_get_input(
+                lambda: (
+                    inputs.metric_range() if hasattr(inputs, "metric_range") else "All"
+                ),
+                default="All",
+            )
+            lower = _safe_get_input(
+                lambda: (
+                    inputs.metric_range_lower()
+                    if hasattr(inputs, "metric_range_lower")
+                    else None
+                ),
+                default=None,
+            )
+            upper = _safe_get_input(
+                lambda: (
+                    inputs.metric_range_upper()
+                    if hasattr(inputs, "metric_range_upper")
+                    else None
+                ),
+                default=None,
+            )
+
+            # Generic numeric range filtering on selected metric
+            if (
+                metric_range_mode == "Range"
+                and metric in test_data.columns
+                and metric in ref_data.columns
+            ):
+                if lower is not None or upper is not None:
+                    before_counts = (len(test_data), len(ref_data))
+                    if lower is not None:
+                        test_data = test_data[test_data[metric] >= lower]
+                        ref_data = ref_data[ref_data[metric] >= lower]
+                    if upper is not None:
+                        test_data = test_data[test_data[metric] <= upper]
+                        ref_data = ref_data[ref_data[metric] <= upper]
+                    if test_data.empty or ref_data.empty:
+                        logger.info(
+                            "Metric range filtering (%s) resulted in empty dataset (before counts test=%s ref=%s, bounds: %s - %s)",
+                            metric,
+                            before_counts[0],
+                            before_counts[1],
+                            lower,
+                            upper,
+                        )
+                        return pd.DataFrame(), pd.DataFrame()
+
+            # Special case: heart rate ≈ step cadence
+            if (
+                metric_range_mode == "HR ≈ step cadence"
+                and "heart_rate" in test_data.columns
+                and "cadence" in test_data.columns
+            ):
+                tol_lower = lower if lower is not None else 0
+                tol_upper = upper if upper is not None else 0
+
+                target_hr = test_data["cadence"] * 2
+                mask = (test_data["heart_rate"] >= target_hr + tol_lower) & (
+                    test_data["heart_rate"] <= target_hr + tol_upper
+                )
+                before_n = len(test_data)
+                test_data = test_data[mask]
+                logger.info(
+                    "Applied HR ≈ 2 × cadence filter pre-shift: kept %s / %s rows (tol %s %s)",
+                    len(test_data),
+                    before_n,
+                    tol_lower,
+                    tol_upper,
+                )
+                if test_data.empty:
+                    logger.info(
+                        "Metric range filtering (HR ≈ step cadence) resulted in empty dataset"
+                    )
+                    return pd.DataFrame(), pd.DataFrame()
+
+            # Safely get trim time from start and/or end and treat non-int as 0
             trim_start = _safe_get_input(
                 lambda: (
                     int(inputs.trim_from_start() or 0)
@@ -126,7 +206,6 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
                 default="None (manual)",
             )
 
-            # If auto-shift is disabled, don't modify the input
             if "None" in auto_shift_method:
                 return
 
@@ -135,14 +214,11 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
                 return
 
             metric = _get_comparison_metric()
-
-            # Calculate optimal shift
             seconds_to_shift = determine_optimal_shift(
                 test_data, ref_data, metric, auto_shift_method
             )
             optimal_shift = seconds_to_shift if seconds_to_shift is not None else 0
 
-            # Update the shift_seconds input with the calculated value
             if hasattr(inputs, "shift_seconds"):
                 try:
                     ui.update_numeric("shift_seconds", value=optimal_shift)
@@ -151,15 +227,13 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
                         optimal_shift,
                         auto_shift_method,
                     )
-                except Exception as set_error:
+                except Exception as set_error:  # noqa: BLE001
                     logger.warning("Could not set shift_seconds input: %s", set_error)
-
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Error in _set_optimal_shift: %s", e, exc_info=True)
 
     @reactive.Calc
     def _get_shifted_data():
-        # Safely get shift_seconds and treat non-int as 0
         shift_seconds = _safe_get_input(
             lambda: (
                 int(inputs.shift_seconds() or 0)
@@ -173,18 +247,15 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
         if test_data.empty or ref_data.empty:
             return pd.DataFrame(), pd.DataFrame()
 
-        # Shift test data time if specified
         try:
             if shift_seconds != 0:
-                test_data = (
-                    test_data.copy()
-                )  # Make a copy to avoid modifying original data
+                test_data = test_data.copy()
                 test_data["elapsed_seconds"] += shift_seconds
                 test_data["timestamp"] = test_data["timestamp"] + pd.to_timedelta(
                     shift_seconds, unit="s"
                 )
             return test_data, ref_data
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Error in _get_shifted_data: %s", e, exc_info=True)
             return pd.DataFrame(), pd.DataFrame()
 
