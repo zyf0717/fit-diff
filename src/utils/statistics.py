@@ -55,9 +55,9 @@ def calculate_basic_stats(
 
     # Set 'device' as columns, 'stat' as index
     df_pivot = df.set_index("device").T
-    df_pivot = df_pivot.reset_index().rename(columns={"index": "stat"})
+    df_pivot = df_pivot.reset_index().rename(columns={"index": "-"})
     # Ensure columns are in order: stat, test, reference
-    cols = ["stat"]
+    cols = ["-"]
     for dev in ["test", "reference"]:
         if dev in df_pivot.columns:
             cols.append(dev)
@@ -65,7 +65,7 @@ def calculate_basic_stats(
     return df_pivot
 
 
-def get_bias_agreement_stats(
+def get_validity_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get bias and agreement statistics using multiple statistical tests."""
@@ -127,7 +127,7 @@ def get_bias_agreement_stats(
     return df
 
 
-def get_error_magnitude_stats(
+def get_precision_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get error magnitude statistics."""
@@ -193,7 +193,7 @@ def calculate_ccc(x: pd.Series, y: pd.Series) -> float:
     return numerator / denominator if denominator != 0 else 0.0
 
 
-def get_correlation_stats(
+def get_reliability_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get correlation statistics."""
@@ -212,12 +212,12 @@ def get_correlation_stats(
     # Calculate p-value for Pearson correlation (for reference)
     _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
 
-    correlation_stats = {
+    reliability_stats = {
         "Concordance Correlation Coefficient": round(ccc, 6),
         "Pearson Correlation Coefficient": round(pearson_r, 6),
         "Pearson Correlation P-value": round(r_p_value, 8),
     }
 
     # Convert to transposed DataFrame
-    df = pd.DataFrame(list(correlation_stats.items()), columns=["Metric", "Value"])
+    df = pd.DataFrame(list(reliability_stats.items()), columns=["Metric", "Value"])
     return df

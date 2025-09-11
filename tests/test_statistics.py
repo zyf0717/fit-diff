@@ -9,11 +9,11 @@ import pytest
 from src.utils import (
     calculate_basic_stats,
     calculate_ccc,
-    get_bias_agreement_stats,
-    get_correlation_stats,
-    get_error_magnitude_stats,
     get_file_information,
+    get_precision_stats,
     get_raw_data_sample,
+    get_reliability_stats,
+    get_validity_stats,
 )
 
 
@@ -121,7 +121,7 @@ class TestCalculateCCC:
 
 
 class TestGetBiasAgreementStats:
-    """Test cases for get_bias_agreement_stats function."""
+    """Test cases for get_validity_stats function."""
 
     def create_aligned_data(self):
         """Create test aligned data."""
@@ -133,12 +133,12 @@ class TestGetBiasAgreementStats:
             }
         )
 
-    def test_get_bias_agreement_stats_success(self):
+    def test_get_validity_stats_success(self):
         """Test successful bias agreement stats calculation."""
         aligned_df = self.create_aligned_data()
 
         # Test
-        result = get_bias_agreement_stats(aligned_df, "heart_rate")
+        result = get_validity_stats(aligned_df, "heart_rate")
 
         # Verify
         assert result is not None
@@ -158,14 +158,14 @@ class TestGetBiasAgreementStats:
         for metric in expected_metrics:
             assert any(metric in m for m in metrics)
 
-    def test_get_bias_agreement_stats_invalid_input(self):
+    def test_get_validity_stats_invalid_input(self):
         """Test with invalid input."""
-        assert get_bias_agreement_stats(None, "heart_rate") is None
-        assert get_bias_agreement_stats(pd.DataFrame(), "heart_rate") is None
+        assert get_validity_stats(None, "heart_rate") is None
+        assert get_validity_stats(pd.DataFrame(), "heart_rate") is None
 
 
 class TestGetErrorMagnitudeStats:
-    """Test cases for get_error_magnitude_stats function."""
+    """Test cases for get_precision_stats function."""
 
     def create_aligned_data(self):
         """Create test aligned data."""
@@ -176,12 +176,12 @@ class TestGetErrorMagnitudeStats:
             }
         )
 
-    def test_get_error_magnitude_stats_success(self):
+    def test_get_precision_stats_success(self):
         """Test successful error magnitude stats calculation."""
         aligned_df = self.create_aligned_data()
 
         # Test
-        result = get_error_magnitude_stats(aligned_df, "heart_rate")
+        result = get_precision_stats(aligned_df, "heart_rate")
 
         # Verify
         assert result is not None
@@ -194,14 +194,14 @@ class TestGetErrorMagnitudeStats:
         expected_metrics = ["MAE", "RMSE", "MSE", "Std of Errors"]
         assert all(metric in metrics for metric in expected_metrics)
 
-    def test_get_error_magnitude_stats_invalid_input(self):
+    def test_get_precision_stats_invalid_input(self):
         """Test with invalid input."""
-        assert get_error_magnitude_stats(None, "heart_rate") is None
-        assert get_error_magnitude_stats(pd.DataFrame(), "heart_rate") is None
+        assert get_precision_stats(None, "heart_rate") is None
+        assert get_precision_stats(pd.DataFrame(), "heart_rate") is None
 
 
 class TestGetCorrelationStats:
-    """Test cases for get_correlation_stats function."""
+    """Test cases for get_reliability_stats function."""
 
     def create_aligned_data(self):
         """Create test aligned data."""
@@ -212,12 +212,12 @@ class TestGetCorrelationStats:
             }
         )
 
-    def test_get_correlation_stats_success(self):
+    def test_get_reliability_stats_success(self):
         """Test successful correlation stats calculation."""
         aligned_df = self.create_aligned_data()
 
         # Test
-        result = get_correlation_stats(aligned_df, "heart_rate")
+        result = get_reliability_stats(aligned_df, "heart_rate")
 
         # Verify
         assert result is not None
@@ -234,10 +234,10 @@ class TestGetCorrelationStats:
         ]
         assert all(metric in metrics for metric in expected_metrics)
 
-    def test_get_correlation_stats_invalid_input(self):
+    def test_get_reliability_stats_invalid_input(self):
         """Test with invalid input."""
-        assert get_correlation_stats(None, "heart_rate") is None
-        assert get_correlation_stats(pd.DataFrame(), "heart_rate") is None
+        assert get_reliability_stats(None, "heart_rate") is None
+        assert get_reliability_stats(pd.DataFrame(), "heart_rate") is None
 
 
 class TestGetFileInformation:

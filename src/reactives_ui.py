@@ -71,7 +71,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("File Statistics"),
+                            ui.card_header("Data Overview"),
                             ui.output_data_frame("basicStatsTable"),
                         ),
                         ui.card(
@@ -82,16 +82,16 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Bias & Agreement"),
-                            ui.output_data_frame("biasAgreementTable"),
+                            ui.card_header("Validity"),
+                            ui.output_data_frame("validityTable"),
                         ),
                         ui.card(
-                            ui.card_header("Error Magnitude"),
-                            ui.output_data_frame("errorMagnitudeTable"),
+                            ui.card_header("Precision"),
+                            ui.output_data_frame("precisionTable"),
                         ),
                         ui.card(
-                            ui.card_header("Correlation"),
-                            ui.output_data_frame("correlationTable"),
+                            ui.card_header("Reliability"),
+                            ui.output_data_frame("reliabilityTable"),
                         ),
                         col_widths=[4, 4, 4],
                     ),

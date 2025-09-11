@@ -8,11 +8,11 @@ from shiny import Inputs, reactive, render, ui
 from src.utils import (
     calculate_basic_stats,
     generate_llm_summary_stream,
-    get_bias_agreement_stats,
-    get_correlation_stats,
-    get_error_magnitude_stats,
     get_file_information,
+    get_precision_stats,
     get_raw_data_sample,
+    get_reliability_stats,
+    get_validity_stats,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,27 +31,27 @@ def create_statistics_reactives(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
-    def _get_bias_stats():
+    def _get_validity_stats():
         aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
-        return get_bias_agreement_stats(
+        return get_validity_stats(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
-    def _get_error_stats():
+    def _get_precision_stats():
         aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
-        return get_error_magnitude_stats(
+        return get_precision_stats(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
-    def _get_correlation_stats():
+    def _get_reliability_stats():
         aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
         if aligned_data is None:
             return pd.DataFrame()
-        return get_correlation_stats(
+        return get_reliability_stats(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
@@ -62,21 +62,21 @@ def create_statistics_reactives(
         )
 
     @render.data_frame
-    def biasAgreementTable():
+    def validityTable():
         return data_reactives["_safe_execute"](
-            _get_bias_stats, "biasAgreementTable", pd.DataFrame()
+            _get_validity_stats, "validityTable", pd.DataFrame()
         )
 
     @render.data_frame
-    def errorMagnitudeTable():
+    def precisionTable():
         return data_reactives["_safe_execute"](
-            _get_error_stats, "errorMagnitudeTable", pd.DataFrame()
+            _get_precision_stats, "precisionTable", pd.DataFrame()
         )
 
     @render.data_frame
-    def correlationTable():
+    def reliabilityTable():
         return data_reactives["_safe_execute"](
-            _get_correlation_stats, "correlationTable", pd.DataFrame()
+            _get_reliability_stats, "reliabilityTable", pd.DataFrame()
         )
 
     md = ui.MarkdownStream("streamOutput")
@@ -89,9 +89,9 @@ def create_statistics_reactives(
             await md.stream(
                 generate_llm_summary_stream(
                     metric=metric,
-                    bias_stats=_get_bias_stats(),
-                    error_stats=_get_error_stats(),
-                    correlation_stats=_get_correlation_stats(),
+                    validity_stats=_get_validity_stats(),
+                    precision_stats=_get_precision_stats(),
+                    reliability_stats=_get_reliability_stats(),
                 )
             )
         except Exception as e:
@@ -150,13 +150,13 @@ def create_statistics_reactives(
 
     return {
         "_get_stats": _get_stats,
-        "_get_bias_stats": _get_bias_stats,
-        "_get_error_stats": _get_error_stats,
-        "_get_correlation_stats": _get_correlation_stats,
+        "_get_reliability_stats": _get_reliability_stats,
+        "_get_precision_stats": _get_precision_stats,
+        "_get_reliability_stats": _get_reliability_stats,
         "basicStatsTable": basicStatsTable,
-        "biasAgreementTable": biasAgreementTable,
-        "errorMagnitudeTable": errorMagnitudeTable,
-        "correlationTable": correlationTable,
+        "validityTable": validityTable,
+        "precisionTable": precisionTable,
+        "reliabilityTable": reliabilityTable,
         "llm_summary_effect": llm_summary_effect,
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,

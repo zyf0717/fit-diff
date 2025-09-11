@@ -22,9 +22,9 @@ from .llm_integration import generate_llm_summary_stream
 from .statistics import (
     calculate_basic_stats,
     calculate_ccc,
-    get_bias_agreement_stats,
-    get_correlation_stats,
-    get_error_magnitude_stats,
+    get_precision_stats,
+    get_reliability_stats,
+    get_validity_stats,
 )
 
 # Visualization functions
@@ -46,9 +46,9 @@ __all__ = [
     # Statistics
     "calculate_basic_stats",
     "calculate_ccc",
-    "get_bias_agreement_stats",
-    "get_error_magnitude_stats",
-    "get_correlation_stats",
+    "get_validity_stats",
+    "get_precision_stats",
+    "get_reliability_stats",
     # Visualizations
     "create_metric_plot",
     "create_error_histogram",
