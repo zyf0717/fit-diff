@@ -100,10 +100,9 @@ def get_validity_stats(
     n_total = len(non_zero_errors)
 
     if n_total > 0:
-        # Use binomial test (two-tailed)
-        sign_p_val = (
-            stats.binomtest(min(n_positive, n_negative), n_total, 0.5).pvalue * 2
-        )
+        sign_p_val = stats.binomtest(
+            n_positive, n_total, 0.5, alternative="two-sided"
+        ).pvalue
     else:
         sign_p_val = np.nan
 
