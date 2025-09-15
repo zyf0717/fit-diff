@@ -102,11 +102,19 @@ def create_data_processing_reactives(
                 if lower is not None or upper is not None:
                     before_counts = (len(test_data), len(ref_data))
                     if lower is not None:
-                        test_data = test_data[test_data[metric] >= lower]
-                        ref_data = ref_data[ref_data[metric] >= lower]
+                        test_data = test_data[test_data[metric] >= lower].reset_index(
+                            drop=True
+                        )
+                        ref_data = ref_data[ref_data[metric] >= lower].reset_index(
+                            drop=True
+                        )
                     if upper is not None:
-                        test_data = test_data[test_data[metric] <= upper]
-                        ref_data = ref_data[ref_data[metric] <= upper]
+                        test_data = test_data[test_data[metric] <= upper].reset_index(
+                            drop=True
+                        )
+                        ref_data = ref_data[ref_data[metric] <= upper].reset_index(
+                            drop=True
+                        )
                     if test_data.empty or ref_data.empty:
                         logger.info(
                             "Metric range filtering (%s) resulted in empty dataset (before counts test=%s ref=%s, bounds: %s - %s)",
@@ -132,7 +140,7 @@ def create_data_processing_reactives(
                     test_data["heart_rate"] <= target_hr + tol_upper
                 )
                 before_n = len(test_data)
-                test_data = test_data[mask]
+                test_data = test_data[mask].reset_index(drop=True)
                 logger.info(
                     "Applied HR ≈ 2 × cadence filter pre-shift: kept %s / %s rows (tol %s %s)",
                     len(test_data),
@@ -196,11 +204,11 @@ def create_data_processing_reactives(
             test_data = test_data[
                 (test_data["elapsed_seconds"] >= start_time)
                 & (test_data["elapsed_seconds"] <= end_time)
-            ]
+            ].reset_index(drop=True)
             ref_data = ref_data[
                 (ref_data["elapsed_seconds"] >= start_time)
                 & (ref_data["elapsed_seconds"] <= end_time)
-            ]
+            ].reset_index(drop=True)
             logger.info(
                 "Applied time range filter: [%s, %s] seconds (kept test %s/%s, ref %s/%s)",
                 start_time,
@@ -308,7 +316,7 @@ def create_data_processing_reactives(
             # Merge on timestamp to align the data properly
             aligned_df = pd.merge(
                 test_clean, ref_clean, on="timestamp", suffixes=("_test", "_ref")
-            )
+            ).reset_index(drop=True)
 
             if aligned_df.empty:
                 return None
@@ -331,6 +339,9 @@ def create_data_processing_reactives(
             # Apply outlier removal to differences if specified
             if outlier_methods:
                 aligned_df = remove_outliers(aligned_df, "difference", outlier_methods)
+                aligned_df = aligned_df.reset_index(
+                    drop=True
+                )  # Reset after outlier removal
 
             # Remove the temporary difference column
             aligned_df = aligned_df.drop(columns=["difference"])
