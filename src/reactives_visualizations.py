@@ -18,12 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_visualization_reactives(
-    inputs: Inputs, data_reactives: dict, metric_plot_x_range=None
+    inputs: Inputs, data_reactives: dict, metric_plot_x_range=reactive.Value(None)
 ):
     """Create visualization reactive functions."""
-
-    metric_plot_x_range = reactive.Value(None)
-    metric_plot_y_range = reactive.Value(None)
 
     @render_widget
     def metricPlot():
@@ -55,7 +52,7 @@ def create_visualization_reactives(
                 # This is useful when the relayout_data doesn't contain explicit ranges
                 try:
                     current_xaxis = fw.layout.xaxis
-                    current_yaxis = fw.layout.yaxis
+                    # current_yaxis = fw.layout.yaxis
 
                     if hasattr(current_xaxis, "range") and current_xaxis.range:
                         metric_plot_x_range.set(current_xaxis.range)
@@ -63,11 +60,11 @@ def create_visualization_reactives(
                             "X-axis range set at: %s", metric_plot_x_range.get()
                         )
 
-                    if hasattr(current_yaxis, "range") and current_yaxis.range:
-                        metric_plot_y_range.set(current_yaxis.range)
-                        logger.info(
-                            "Y-axis range set at: %s", metric_plot_y_range.get()
-                        )
+                    # if hasattr(current_yaxis, "range") and current_yaxis.range:
+                    #     metric_plot_y_range.set(current_yaxis.range)
+                    #     logger.info(
+                    #         "Y-axis range set at: %s", metric_plot_y_range.get()
+                    #     )
 
                 except Exception as e:
                     logger.debug("Could not access current figure ranges: %s", e)
@@ -119,8 +116,6 @@ def create_visualization_reactives(
         )
 
     return {
-        "metric_plot_x_range": metric_plot_x_range,
-        "metric_plot_y_range": metric_plot_y_range,
         "metricPlot": metricPlot,
         "errorHistogramPlot": errorHistogramPlot,
         "blandAltmanPlot": blandAltmanPlot,

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_data_processing_reactives(
-    inputs: Inputs, file_reactives: dict, metric_plot_x_range=None
+    inputs: Inputs, file_reactives: dict, metric_plot_x_range=reactive.Value(None)
 ):
     """Create data processing reactive functions."""
 
@@ -342,19 +342,30 @@ def create_data_processing_reactives(
 
     @reactive.calc
     def _get_data_by_selected_range():
-        aligned_df = _get_trimmed_shifted_data().copy()
+        aligned_df = _get_trimmed_shifted_data()
         if aligned_df is None or aligned_df.empty:
+            logger.error("_get_data_by_selected_range: aligned_df is empty or None")
             return pd.DataFrame()
 
+        logger.info(
+            "_get_data_by_selected_range columns: %s", aligned_df.columns.tolist()
+        )
+
         # Apply x-axis range filtering if set
-        x_range = metric_plot_x_range.get() or None
+        # Access the reactive value properly to establish dependency
+        x_range = None
+        if metric_plot_x_range is not None:
+            x_range = metric_plot_x_range()
+            logger.info("Current x_range from reactive: %s", x_range)
+
+        aligned_df = aligned_df.copy()  # Need to copy before filtering
         if x_range and len(x_range) == 2:
             start, end = x_range
             before_count = len(aligned_df)
             aligned_df = aligned_df[
-                (aligned_df["elapsed_seconds"] >= int(start))
-                & (aligned_df["elapsed_seconds"] <= int(end))
-            ].reset_index(drop=True)
+                (aligned_df["elapsed_seconds_test"] >= int(start))
+                & (aligned_df["elapsed_seconds_test"] <= int(end))
+            ]
             logger.info(
                 "Applied x-axis range filter: [%s, %s] seconds",
                 start,
