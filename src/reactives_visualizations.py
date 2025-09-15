@@ -4,7 +4,7 @@ import logging
 
 # Plotly FigureWidget is needed for interactive callbacks (click/selection)
 import plotly.graph_objects as go
-from shiny import Inputs
+from shiny import Inputs, reactive
 from shinywidgets import render_widget
 
 from src.utils import (
@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
     """Create visualization reactive functions."""
+
+    metric_plot_x_range = reactive.Value(None)
+    metric_plot_y_range = reactive.Value(None)
 
     @render_widget
     def metricPlot():
@@ -44,12 +47,7 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
 
                 # Add a check to ensure relayout_data is not None before proceeding
                 if relayout_data is None:
-                    logger.info("Relayout data is None, skipping callback.")
                     return
-
-                logger.info(
-                    "Relayout event received with keys: %s", list(relayout_data.keys())
-                )
 
                 # Access the current figure layout to get actual ranges
                 # This is useful when the relayout_data doesn't contain explicit ranges
@@ -58,13 +56,15 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
                     current_yaxis = fw.layout.yaxis
 
                     if hasattr(current_xaxis, "range") and current_xaxis.range:
+                        metric_plot_x_range.set(current_xaxis.range)
                         logger.info(
-                            "Current X-axis range from figure: %s", current_xaxis.range
+                            "X-axis range set at: %s", metric_plot_x_range.get()
                         )
 
                     if hasattr(current_yaxis, "range") and current_yaxis.range:
+                        metric_plot_y_range.set(current_yaxis.range)
                         logger.info(
-                            "Current Y-axis range from figure: %s", current_yaxis.range
+                            "Y-axis range set at: %s", metric_plot_y_range.get()
                         )
 
                 except Exception as e:
