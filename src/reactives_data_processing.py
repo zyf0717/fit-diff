@@ -366,8 +366,7 @@ def create_data_processing_reactives(
         # Access the reactive value properly to establish dependency
         x_range = None
         if metric_plot_x_range is not None:
-            x_range = metric_plot_x_range()
-            logger.info("Current x_range from reactive: %s", x_range)
+            x_range = metric_plot_x_range.get()
 
         aligned_df = aligned_df.copy()  # Need to copy before filtering
         if x_range and len(x_range) == 2:
@@ -388,7 +387,7 @@ def create_data_processing_reactives(
                 before_count,
             )
             if aligned_df.empty:
-                logger.info("X-axis range filtering resulted in empty dataset")
+                logger.warning("X-axis range filtering resulted in empty dataset")
                 return pd.DataFrame()
         return aligned_df
 
