@@ -13,17 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 def server(inputs: Inputs, output: Outputs, session: Session):
-    # Create shared reactive values
+    # Create shared/cross-module reactive values
     metric_plot_x_range = reactive.Value(None)
+    metric_plot_y_range = reactive.Value(None)
 
     # Create reactive groups
     file_reactives = create_file_handling_reactives(inputs, session)
     data_reactives = create_data_processing_reactives(
-        inputs, file_reactives, metric_plot_x_range
+        inputs, file_reactives, metric_plot_x_range, metric_plot_y_range
     )
     ui_reactives = create_ui_reactives(inputs, file_reactives, data_reactives)
     visualization_reactives = create_visualization_reactives(
-        inputs, data_reactives, metric_plot_x_range
+        inputs, data_reactives, metric_plot_x_range, metric_plot_y_range
     )
     statistics_reactives = create_statistics_reactives(
         inputs, file_reactives, data_reactives

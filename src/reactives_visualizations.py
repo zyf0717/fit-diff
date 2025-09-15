@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_visualization_reactives(
-    inputs: Inputs, data_reactives: dict, metric_plot_x_range=reactive.Value(None)
+    inputs: Inputs,
+    data_reactives: dict,
+    metric_plot_x_range=reactive.Value(None),
+    metric_plot_y_range=reactive.Value(None),
 ):
     """Create visualization reactive functions."""
 
@@ -51,15 +54,25 @@ def create_visualization_reactives(
                 # Access the current figure layout to get actual ranges
                 try:
                     current_xaxis = fw.layout.xaxis
+                    current_yaxis = fw.layout.yaxis
 
                     if hasattr(current_xaxis, "range") and current_xaxis.range:
-                        new_range = tuple(current_xaxis.range)  # Convert to tuple
+                        new_x_range = tuple(current_xaxis.range)  # Convert to tuple
                         current_range = metric_plot_x_range.get()
 
                         # Only update if the range actually changed
-                        if current_range != new_range:
-                            metric_plot_x_range.set(new_range)
-                            logger.info("X-axis range set at: %s", new_range)
+                        if current_range != new_x_range:
+                            metric_plot_x_range.set(new_x_range)
+                            logger.info("X-axis range set at: %s", new_x_range)
+
+                    if hasattr(current_yaxis, "range") and current_yaxis.range:
+                        new_y_range = tuple(current_yaxis.range)  # Convert to tuple
+                        current_range = metric_plot_y_range.get()
+
+                        # Only update if the range actually changed
+                        if current_range != new_y_range:
+                            metric_plot_y_range.set(new_y_range)
+                            logger.info("Y-axis range set at: %s", new_y_range)
 
                 except Exception as e:
                     logger.debug("Could not access current figure ranges: %s", e)

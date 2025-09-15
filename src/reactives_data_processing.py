@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_data_processing_reactives(
-    inputs: Inputs, file_reactives: dict, metric_plot_x_range=reactive.Value(None)
+    inputs: Inputs,
+    file_reactives: dict,
+    metric_plot_x_range=reactive.Value(None),
+    metric_plot_y_range=reactive.Value(None),
 ):
     """Create data processing reactive functions."""
 
