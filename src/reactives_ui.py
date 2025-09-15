@@ -94,14 +94,14 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Data Overview"),
-                            ui.output_data_frame("basicStatsTable"),
-                        ),
-                        ui.card(
                             ui.card_header("Metric Visualization"),
                             output_widget("metricPlot"),
                         ),
-                        col_widths=[3, 9],
+                        ui.card(
+                            ui.card_header("Data Overview"),
+                            ui.output_data_frame("basicStatsTable"),
+                        ),
+                        col_widths=[9, 3],
                     ),
                     ui.layout_columns(
                         ui.card(

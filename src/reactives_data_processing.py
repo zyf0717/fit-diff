@@ -15,7 +15,9 @@ from src.utils import (
 logger = logging.getLogger(__name__)
 
 
-def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
+def create_data_processing_reactives(
+    inputs: Inputs, file_reactives: dict, metric_plot_x_range=None
+):
     """Create data processing reactive functions."""
 
     def _safe_get_input(input_func, default=None):
@@ -284,7 +286,7 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
             return pd.DataFrame(), pd.DataFrame()
 
     @reactive.Calc
-    def _get_aligned_data_with_outlier_removal():
+    def _get_trimmed_shifted_data():
         """Get aligned test and reference data with outlier removal applied to differences."""
         try:
             prepared_data = _get_shifted_data()
@@ -335,10 +337,38 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
 
             return aligned_df if not aligned_df.empty else None
         except Exception as e:
-            logger.error(
-                "Error in _get_aligned_data_with_outlier_removal: %s", e, exc_info=True
-            )
+            logger.error("Error in _get_trimmed_shifted_data: %s", e, exc_info=True)
             return None
+
+    @reactive.calc
+    def _get_data_by_selected_range():
+        aligned_df = _get_trimmed_shifted_data().copy()
+        if aligned_df is None or aligned_df.empty:
+            return pd.DataFrame()
+
+        # Apply x-axis range filtering if set
+        x_range = metric_plot_x_range.get() or None
+        if x_range and len(x_range) == 2:
+            start, end = x_range
+            before_count = len(aligned_df)
+            aligned_df = aligned_df[
+                (aligned_df["elapsed_seconds"] >= int(start))
+                & (aligned_df["elapsed_seconds"] <= int(end))
+            ].reset_index(drop=True)
+            logger.info(
+                "Applied x-axis range filter: [%s, %s] seconds",
+                start,
+                end,
+            )
+            logger.info(
+                "Kept %s / %s rows after x-axis range filtering",
+                len(aligned_df),
+                before_count,
+            )
+            if aligned_df.empty:
+                logger.info("X-axis range filtering resulted in empty dataset")
+                return pd.DataFrame()
+        return aligned_df
 
     # Helper functions for error handling and data validation
     def _safe_execute(func, func_name, default_return=None):
@@ -374,9 +404,10 @@ def create_data_processing_reactives(inputs: Inputs, file_reactives: dict):
     return {
         "_get_shifted_data": _get_shifted_data,
         "_get_trimmed_data": _get_trimmed_data,
-        "_get_aligned_data_with_outlier_removal": _get_aligned_data_with_outlier_removal,
+        "_get_trimmed_shifted_data": _get_trimmed_shifted_data,
         "_safe_execute": _safe_execute,
         "_get_comparison_metric": _get_comparison_metric,
         "_safe_get_input": _safe_get_input,
         "_set_optimal_shift": _set_optimal_shift,
+        "_get_data_by_selected_range": _get_data_by_selected_range,
     }

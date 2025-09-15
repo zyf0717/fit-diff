@@ -24,7 +24,7 @@ def create_statistics_reactives(
     """Create statistics and table reactive functions."""
 
     def _get_stats():
-        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+        aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
         return calculate_basic_stats(
@@ -32,7 +32,7 @@ def create_statistics_reactives(
         )
 
     def _get_validity_stats():
-        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+        aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_validity_stats(
@@ -40,7 +40,7 @@ def create_statistics_reactives(
         )
 
     def _get_precision_stats():
-        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+        aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_precision_stats(
@@ -48,7 +48,7 @@ def create_statistics_reactives(
         )
 
     def _get_reliability_stats():
-        aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+        aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
         return get_reliability_stats(

@@ -17,7 +17,9 @@ from src.utils import (
 logger = logging.getLogger(__name__)
 
 
-def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
+def create_visualization_reactives(
+    inputs: Inputs, data_reactives: dict, metric_plot_x_range=None
+):
     """Create visualization reactive functions."""
 
     metric_plot_x_range = reactive.Value(None)
@@ -26,7 +28,7 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
     @render_widget
     def metricPlot():
         def _create_plot():
-            aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+            aligned_data = data_reactives["_get_trimmed_shifted_data"]()
             if aligned_data is None:
                 return None
             fig = create_metric_plot(
@@ -81,7 +83,7 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
     @render_widget
     def errorHistogramPlot():
         def _create_histogram():
-            aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+            aligned_data = data_reactives["_get_data_by_selected_range"]()
             if aligned_data is None:
                 return None
             return create_error_histogram(
@@ -93,7 +95,7 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
     @render_widget
     def blandAltmanPlot():
         def _create_bland_altman():
-            aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+            aligned_data = data_reactives["_get_data_by_selected_range"]()
             if aligned_data is None:
                 return None
             return create_bland_altman_plot(
@@ -105,7 +107,7 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
     @render_widget
     def rollingErrorPlot():
         def _create_rolling_error():
-            aligned_data = data_reactives["_get_aligned_data_with_outlier_removal"]()
+            aligned_data = data_reactives["_get_data_by_selected_range"]()
             if aligned_data is None:
                 return None
             return create_rolling_error_plot(
@@ -117,6 +119,8 @@ def create_visualization_reactives(inputs: Inputs, data_reactives: dict):
         )
 
     return {
+        "metric_plot_x_range": metric_plot_x_range,
+        "metric_plot_y_range": metric_plot_y_range,
         "metricPlot": metricPlot,
         "errorHistogramPlot": errorHistogramPlot,
         "blandAltmanPlot": blandAltmanPlot,
