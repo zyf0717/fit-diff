@@ -49,22 +49,17 @@ def create_visualization_reactives(
                     return
 
                 # Access the current figure layout to get actual ranges
-                # This is useful when the relayout_data doesn't contain explicit ranges
                 try:
                     current_xaxis = fw.layout.xaxis
-                    # current_yaxis = fw.layout.yaxis
 
                     if hasattr(current_xaxis, "range") and current_xaxis.range:
-                        metric_plot_x_range.set(current_xaxis.range)
-                        logger.info(
-                            "X-axis range set at: %s", metric_plot_x_range.get()
-                        )
+                        new_range = tuple(current_xaxis.range)  # Convert to tuple
+                        current_range = metric_plot_x_range.get()
 
-                    # if hasattr(current_yaxis, "range") and current_yaxis.range:
-                    #     metric_plot_y_range.set(current_yaxis.range)
-                    #     logger.info(
-                    #         "Y-axis range set at: %s", metric_plot_y_range.get()
-                    #     )
+                        # Only update if the range actually changed
+                        if current_range != new_range:
+                            metric_plot_x_range.set(new_range)
+                            logger.info("X-axis range set at: %s", new_range)
 
                 except Exception as e:
                     logger.debug("Could not access current figure ranges: %s", e)
