@@ -23,7 +23,6 @@ def calculate_basic_stats(
     if not test_metric.empty:
         test_stats = {
             "device": "test",
-            "metric": metric,
             "count": test_metric.count(),
             "mean": test_metric.mean(),
             "std": test_metric.std(),
@@ -38,7 +37,6 @@ def calculate_basic_stats(
     if not ref_metric.empty:
         ref_stats = {
             "device": "reference",
-            "metric": metric,
             "count": ref_metric.count(),
             "mean": ref_metric.mean(),
             "std": ref_metric.std(),
@@ -55,9 +53,9 @@ def calculate_basic_stats(
 
     # Set 'device' as columns, 'stat' as index
     df_pivot = df.set_index("device").T
-    df_pivot = df_pivot.reset_index().rename(columns={"index": "-"})
+    df_pivot = df_pivot.reset_index().rename(columns={"index": metric})
     # Ensure columns are in order: stat, test, reference
-    cols = ["-"]
+    cols = [metric]
     for dev in ["test", "reference"]:
         if dev in df_pivot.columns:
             cols.append(dev)

@@ -380,30 +380,39 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     if "timestamp" not in test_data.columns or "timestamp" not in ref_data.columns:
         return 0
 
-    # Set max shift to 180 seconds (3 minutes)
-    max_shift_seconds = 180
+    # Set max shift to 300 seconds (5 minutes)
+    max_shift_seconds = 300
 
     # Default step size is 1 second
     step_size = 1
 
-    # Compute integer intervals (seconds) directly
-    test_intervals = test_data["timestamp"].diff().dropna().astype(int)
-    ref_intervals = ref_data["timestamp"].diff().dropna().astype(int)
+    ### Determine adaptive step size based on data sampling intervals ###
+    test_dt = test_data["timestamp"].diff().dropna().astype(int)
+    ref_dt = ref_data["timestamp"].diff().dropna().astype(int)
 
-    # Filter out non-positive gaps (duplicates / bad records)
-    test_intervals = test_intervals[test_intervals > 0]
-    ref_intervals = ref_intervals[ref_intervals > 0]
+    # keep only positive gaps
+    test_dt = test_dt[test_dt > 0]
+    ref_dt = ref_dt[ref_dt > 0]
 
-    # Adjust step size if only if both datasets have consistent intervals
-    if not test_intervals.empty and not ref_intervals.empty:
-        test_steps = set(test_intervals)
-        ref_steps = set(ref_intervals)
+    if not test_dt.empty and not ref_dt.empty:
+        # Base step per stream: gcd of all intervals
+        def base_step(diffs: np.ndarray) -> int:
+            g = 0
+            for v in diffs:
+                g = math.gcd(g, int(v))
+                if g == 1:  # early exit; can't get smaller than 1
+                    break
+            return max(g, 1)
 
-        if len(test_steps) == 1 and len(ref_steps) == 1:
-            test_step = next(iter(test_steps))
-            ref_step = next(iter(ref_steps))
-            step_size = math.gcd(test_step, ref_step)
-            logger.info("Step size set to %s seconds", step_size)
+        test_base = base_step(test_dt.values)
+        ref_base = base_step(ref_dt.values)
+
+        # Validate that every interval is a multiple of the base (guards weirdness)
+        if np.all((test_dt.values % test_base) == 0) and np.all(
+            (ref_dt.values % ref_base) == 0
+        ):
+            step_size = math.gcd(test_base, ref_base)
+            logger.info("Adaptive step size set at %s seconds", step_size)
 
     best_shift = 0
     best_score = None
