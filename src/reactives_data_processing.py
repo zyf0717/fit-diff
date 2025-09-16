@@ -264,9 +264,9 @@ def create_data_processing_reactives(
                         optimal_shift,
                         auto_shift_method,
                     )
-                except Exception as set_error:  # noqa: BLE001
+                except Exception as set_error:
                     logger.warning("Could not set shift_seconds input: %s", set_error)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Error in _set_optimal_shift: %s", e, exc_info=True)
 
     @reactive.Calc
@@ -292,7 +292,7 @@ def create_data_processing_reactives(
                     shift_seconds, unit="s"
                 )
             return test_data, ref_data
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Error in _get_shifted_data: %s", e, exc_info=True)
             return pd.DataFrame(), pd.DataFrame()
 
@@ -300,11 +300,7 @@ def create_data_processing_reactives(
     def _get_trimmed_shifted_data():
         """Get aligned test and reference data with outlier removal applied to differences."""
         try:
-            prepared_data = _get_shifted_data()
-            if not prepared_data or len(prepared_data) != 2:
-                return None
-
-            test_data, ref_data = prepared_data
+            test_data, ref_data = _get_shifted_data()
             if test_data.empty or ref_data.empty:
                 return None
 
@@ -313,12 +309,25 @@ def create_data_processing_reactives(
                 return None
 
             # Get clean data
-            test_clean = test_data[["timestamp", "elapsed_seconds", metric]].dropna()
-            ref_clean = ref_data[["timestamp", "elapsed_seconds", metric]].dropna()
+            test_clean = (
+                test_data[["timestamp", "elapsed_seconds", metric]]
+                .dropna()
+                .reset_index(drop=True)
+            )
+            ref_clean = (
+                ref_data[["timestamp", "elapsed_seconds", metric]]
+                .dropna()
+                .reset_index(drop=True)
+            )
 
             # Merge on timestamp to align the data properly
-            aligned_df = pd.merge(
-                test_clean, ref_clean, on="timestamp", suffixes=("_test", "_ref")
+            aligned_df = pd.merge_asof(
+                test_clean,
+                ref_clean,
+                on="timestamp",
+                suffixes=("_test", "_ref"),
+                # tolerance=pd.Timedelta("250ms"),
+                # direction="nearest",
             ).reset_index(drop=True)
 
             if aligned_df.empty:

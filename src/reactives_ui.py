@@ -38,7 +38,11 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                             ui.input_select(
                                 "metric_range",
                                 "Select metric range:",
-                                choices=["All", "Range", "HR ≈ step cadence"],
+                                choices=[
+                                    "All",
+                                    "Range",
+                                    # "HR ≈ step cadence",
+                                ],
                                 selected="All",
                             ),
                             ui.input_numeric(
