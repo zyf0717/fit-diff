@@ -157,10 +157,11 @@ class TestProcessFit:
         assert "filename" in session_df.columns
         assert record_df["filename"].iloc[0] == "test.csv"
         assert "timestamp" in record_df.columns
-        # Timestamps should now be timezone-aware datetime objects
-        assert str(record_df["timestamp"].dtype) == "datetime64[ns, UTC]"
-        assert all(isinstance(ts, pd.Timestamp) for ts in record_df["timestamp"])
-        assert all(ts.tz is not None for ts in record_df["timestamp"])
+        # Timestamps should now be epoch timestamps (integers)
+        assert record_df["timestamp"].dtype in ["int64", "int32"]
+        assert all(isinstance(ts, (int, np.integer)) for ts in record_df["timestamp"])
+        # Check that timestamps are reasonable epoch values (between 2020 and 2030)
+        assert all(1577836800 <= ts <= 1893456000 for ts in record_df["timestamp"])
 
     @patch("src.utils.data_processing.pd.read_csv")
     def test_process_csv_no_timestamp(self, mock_read_csv):
@@ -200,20 +201,14 @@ class TestProcessFit:
         # Test
         session_df, record_df = process_file("test.csv")
 
-        # Verify timestamps are converted (GMT+8 12:00 becomes UTC 04:00) and kept as datetime objects
-        expected_utc_datetimes = pd.Series(
-            pd.to_datetime(
-                [
-                    "2023-01-01T04:00:00Z",
-                    "2023-01-01T05:00:00Z",
-                    "2023-01-01T06:00:00Z",
-                ],
-                utc=True,
-            )
-        )
+        # Verify timestamps are converted to epoch timestamps
+        # GMT+8 12:00 becomes UTC 04:00, which is 1672545600
+        # GMT+8 13:00 becomes UTC 05:00, which is 1672549200
+        # GMT+8 14:00 becomes UTC 06:00, which is 1672552800
+        expected_epochs = pd.Series([1672545600, 1672549200, 1672552800])
         pd.testing.assert_series_equal(
             record_df["timestamp"].reset_index(drop=True),
-            expected_utc_datetimes.reset_index(drop=True),
+            expected_epochs.reset_index(drop=True),
             check_names=False,
         )
 
@@ -226,9 +221,7 @@ class TestPrepareDataForAnalysis:
         # Create test data
         test_df = pd.DataFrame(
             {
-                "timestamp": pd.to_datetime(
-                    ["2023-01-01 10:00:00", "2023-01-01 10:00:01"]
-                ),
+                "timestamp": [1672574400, 1672574401],  # Epoch timestamps
                 "filename": ["test.fit", "test.fit"],
                 "heart_rate": [150, 155],
                 "speed": [5.0, 5.5],
@@ -237,9 +230,7 @@ class TestPrepareDataForAnalysis:
 
         ref_df = pd.DataFrame(
             {
-                "timestamp": pd.to_datetime(
-                    ["2023-01-01 10:00:00", "2023-01-01 10:00:01"]
-                ),
+                "timestamp": [1672574400, 1672574401],  # Epoch timestamps
                 "filename": ["ref.fit", "ref.fit"],
                 "heart_rate": [148, 153],
                 "speed": [4.8, 5.3],
@@ -263,7 +254,7 @@ class TestPrepareDataForAnalysis:
         """Test data preparation with no common timestamps."""
         test_df = pd.DataFrame(
             {
-                "timestamp": pd.to_datetime(["2023-01-01 10:00:00"]),
+                "timestamp": [1672574400],  # Epoch timestamp
                 "filename": ["test.fit"],
                 "heart_rate": [150],
             }
@@ -271,7 +262,7 @@ class TestPrepareDataForAnalysis:
 
         ref_df = pd.DataFrame(
             {
-                "timestamp": pd.to_datetime(["2023-01-01 11:00:00"]),
+                "timestamp": [1672578000],  # Different epoch timestamp (1 hour later)
                 "filename": ["ref.fit"],
                 "heart_rate": [148],
             }
@@ -384,7 +375,9 @@ class TestRemoveOutliers:
                     50,
                     1000,
                 ],  # 1000 is extreme outlier
-                "timestamp": pd.date_range("2023-01-01", periods=10, freq="1s"),
+                "timestamp": list(
+                    range(1672574400, 1672574410)
+                ),  # 10 consecutive epoch timestamps
                 "filename": ["test.fit"] * 10,
             }
         )
@@ -417,7 +410,9 @@ class TestRemoveOutliers:
                     70,
                     2000,
                 ],  # 2000 is very extreme
-                "timestamp": pd.date_range("2023-01-01", periods=10, freq="1s"),
+                "timestamp": list(
+                    range(1672574400, 1672574410)
+                ),  # 10 consecutive epoch timestamps
                 "filename": ["test.fit"] * 10,
             }
         )

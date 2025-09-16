@@ -41,12 +41,12 @@ class TestCalculateBasicStats:
         # Verify
         assert result is not None
         assert isinstance(result, pd.DataFrame)
-        assert "stat" in result.columns
+        assert "-" in result.columns
         assert "test" in result.columns
         assert "reference" in result.columns
 
         # Check that expected stats are present
-        stats = result["stat"].tolist()
+        stats = result["-"].tolist()
         expected_stats = ["metric", "count", "mean", "std", "min", "max", "median"]
         for stat in expected_stats:
             assert stat in stats
@@ -248,13 +248,7 @@ class TestGetFileInformation:
         test_data = pd.DataFrame(
             {
                 "filename": ["test1.fit", "test1.fit", "test2.fit"],
-                "timestamp": pd.to_datetime(
-                    [
-                        "2023-01-01 10:00:00",
-                        "2023-01-01 10:00:01",
-                        "2023-01-01 10:00:00",
-                    ]
-                ),
+                "timestamp": [1672574400, 1672574401, 1672574400],  # Epoch timestamps
                 "heart_rate": [150, 155, 160],
             }
         )
@@ -262,9 +256,7 @@ class TestGetFileInformation:
         ref_data = pd.DataFrame(
             {
                 "filename": ["ref1.fit", "ref1.fit"],
-                "timestamp": pd.to_datetime(
-                    ["2023-01-01 10:00:00", "2023-01-01 10:00:01"]
-                ),
+                "timestamp": [1672574400, 1672574401],  # Epoch timestamps
                 "heart_rate": [148, 153],
             }
         )
@@ -304,7 +296,9 @@ class TestGetRawDataSample:
         test_data = pd.DataFrame(
             {
                 "filename": ["test.fit"] * 200,
-                "timestamp": pd.date_range("2023-01-01", periods=200, freq="1s"),
+                "timestamp": list(
+                    range(1672574400, 1672574600)
+                ),  # 200 consecutive epoch timestamps
                 "heart_rate": range(150, 350),
                 "speed": np.random.uniform(0, 10, 200),
                 "empty_col": [None] * 200,  # Column with all NaN/None values
@@ -315,7 +309,9 @@ class TestGetRawDataSample:
         ref_data = pd.DataFrame(
             {
                 "filename": ["ref.fit"] * 200,
-                "timestamp": pd.date_range("2023-01-01", periods=200, freq="1s"),
+                "timestamp": list(
+                    range(1672574400, 1672574600)
+                ),  # 200 consecutive epoch timestamps
                 "heart_rate": range(148, 348),
                 "speed": np.random.uniform(0, 10, 200),
                 "empty_col": [None] * 200,

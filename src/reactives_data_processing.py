@@ -288,9 +288,7 @@ def create_data_processing_reactives(
             if shift_seconds != 0:
                 test_data = test_data.copy()
                 test_data["elapsed_seconds"] += shift_seconds
-                test_data["timestamp"] = test_data["timestamp"] + pd.to_timedelta(
-                    shift_seconds, unit="s"
-                )
+                test_data["timestamp"] = test_data["timestamp"] + shift_seconds
             return test_data, ref_data
         except Exception as e:
             logger.error("Error in _get_shifted_data: %s", e, exc_info=True)

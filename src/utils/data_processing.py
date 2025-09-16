@@ -51,7 +51,7 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
 
-    # Keep timestamp as timezone-aware datetime
+    # Convert timestamp to epoch (Unix timestamp)
     if "timestamp" in record_df.columns:
         # Convert to datetime if it's not already
         if record_df["timestamp"].dtype == "object" and isinstance(
@@ -67,6 +67,9 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         else:
             # Convert to UTC timezone
             record_df["timestamp"] = record_df["timestamp"].dt.tz_convert("UTC")
+
+        # Convert to epoch (Unix timestamp in seconds)
+        record_df["timestamp"] = record_df["timestamp"].astype("int64") // 10**9
 
     record_df["filename"] = str(file_path.name)
 
@@ -105,7 +108,7 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Use the first timestamp column found
     timestamp_col = timestamp_cols[0]
 
-    # Convert timestamp column to timezone-aware datetime
+    # Convert timestamp column to epoch (Unix timestamp)
     try:
         # First, try to parse as datetime
         df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors="raise")
@@ -120,6 +123,9 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
             # Timezone info present - convert to UTC
             df[timestamp_col] = df[timestamp_col].dt.tz_convert("UTC")
 
+        # Convert to epoch (Unix timestamp in seconds)
+        df[timestamp_col] = df[timestamp_col].astype("int64") // 10**9
+
     except Exception as e:
         raise ValueError(f"Error parsing timestamp column '{timestamp_col}': {e}")
 
@@ -133,12 +139,11 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Create session_df (summary data - one row per file)
     session_data = {
         "filename": str(file_path.name),
-        "start_time": df["timestamp"].min(),  # Keep as timezone-aware datetime
-        "end_time": df["timestamp"].max(),  # Keep as timezone-aware datetime
+        "start_time": df["timestamp"].min(),  # Min epoch timestamp
+        "end_time": df["timestamp"].max(),  # Max epoch timestamp
         "total_records": len(df),
-        "duration_seconds": (
-            df["timestamp"].max() - df["timestamp"].min()
-        ).total_seconds(),
+        "duration_seconds": df["timestamp"].max()
+        - df["timestamp"].min(),  # Epoch difference
     }
 
     # Add summary statistics for numeric columns
@@ -212,7 +217,7 @@ def prepare_data_for_analysis(
     # Each file starts at elapsed_seconds = 0 from its own first timestamp (after filtering)
     for df in [test_data_df, ref_data_df]:
         df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
-            lambda x: (x - x.min()).dt.total_seconds()
+            lambda x: x - x.min()  # Epoch timestamps already in seconds
         )
 
     return test_data_df, ref_data_df
@@ -291,7 +296,7 @@ def get_file_information(
                         (
                             file_subset["timestamp"].max()
                             - file_subset["timestamp"].min()
-                        ).total_seconds()
+                        )
                         / 60,
                         1,
                     ),
@@ -301,7 +306,7 @@ def get_file_information(
                 }
                 duration_sec = (
                     file_subset["timestamp"].max() - file_subset["timestamp"].min()
-                ).total_seconds()
+                )
                 if duration_sec > 0:
                     file_info["sampling_rate_hz"] = round(
                         len(file_subset) / duration_sec, 2
@@ -392,9 +397,7 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     # Calculate adaptive search parameters based on data range
     test_time_range = test_data["timestamp"].max() - test_data["timestamp"].min()
     ref_time_range = ref_data["timestamp"].max() - ref_data["timestamp"].min()
-    max_overlap_range = max(
-        test_time_range.total_seconds(), ref_time_range.total_seconds()
-    )
+    max_overlap_range = max(test_time_range, ref_time_range)
 
     # Set max shift to 10% of the maximum overlapping range, minimum 10 seconds
     max_shift_seconds = max(10, int(max_overlap_range * 0.1))
@@ -407,15 +410,9 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     if not test_intervals.empty and not ref_intervals.empty:
         # Use the most common interval as step size, but ensure it's at least 1 second
         test_step = (
-            test_intervals.mode().iloc[0].total_seconds()
-            if not test_intervals.mode().empty
-            else 1
+            test_intervals.mode().iloc[0] if not test_intervals.mode().empty else 1
         )
-        ref_step = (
-            ref_intervals.mode().iloc[0].total_seconds()
-            if not ref_intervals.mode().empty
-            else 1
-        )
+        ref_step = ref_intervals.mode().iloc[0] if not ref_intervals.mode().empty else 1
         step_size = max(1, int(min(test_step, ref_step)))
     else:
         step_size = 1  # Fallback to 1 second
@@ -427,9 +424,7 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     def calculate_score(shift_seconds):
         # Create shifted test data
         test_shifted = test_data.copy()
-        test_shifted["timestamp"] = test_shifted["timestamp"] + pd.to_timedelta(
-            shift_seconds, unit="s"
-        )
+        test_shifted["timestamp"] = test_shifted["timestamp"] + shift_seconds
 
         # Merge on timestamp to align data
         merged = pd.merge(
