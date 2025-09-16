@@ -2,6 +2,8 @@
 Data processing utilities for FIT and CSV files.
 """
 
+import logging
+import math
 from pathlib import Path
 from typing import Tuple, Union
 
@@ -10,6 +12,8 @@ import pandas as pd
 from garmin_fit_sdk import Decoder, Stream
 
 from .statistics import calculate_ccc
+
+logger = logging.getLogger(__name__)
 
 
 def process_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -194,18 +198,13 @@ def prepare_data_for_analysis(
     if not common_timestamps:
         return None
 
-    # Filter to only common timestamps
-    test_data_df = test_data_df[
-        test_data_df["timestamp"].isin(common_timestamps)
-    ].copy()
-    ref_data_df = ref_data_df[ref_data_df["timestamp"].isin(common_timestamps)].copy()
+    # Find the first common timestamp across all data
+    first_common_timestamp = min(common_timestamps)
 
-    # Generate elapsed_seconds on a per-file basis
-    # Each file starts at elapsed_seconds = 0 from its own first timestamp (after filtering)
+    # Generate elapsed_seconds starting from the first common timestamp
+    # Both test and reference data will start elapsed_seconds = 0 from the same timestamp
     for df in [test_data_df, ref_data_df]:
-        df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
-            lambda x: x - x.min()  # Epoch timestamps already in seconds
-        )
+        df["elapsed_seconds"] = df["timestamp"] - first_common_timestamp
 
     return test_data_df, ref_data_df
 
@@ -381,28 +380,30 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
     if "timestamp" not in test_data.columns or "timestamp" not in ref_data.columns:
         return 0
 
-    # Calculate adaptive search parameters based on data range
-    test_time_range = test_data["timestamp"].max() - test_data["timestamp"].min()
-    ref_time_range = ref_data["timestamp"].max() - ref_data["timestamp"].min()
-    max_overlap_range = max(test_time_range, ref_time_range)
+    # Set max shift to 180 seconds (3 minutes)
+    max_shift_seconds = 180
 
-    # Set max shift to 10% of the maximum overlapping range, minimum 10 seconds
-    max_shift_seconds = max(10, int(max_overlap_range * 0.1))
+    # Default step size is 1 second
+    step_size = 1
 
-    # Determine step size based on timestamp resolution
-    # Calculate typical time intervals in the data
-    test_intervals = test_data["timestamp"].diff().dropna()
-    ref_intervals = ref_data["timestamp"].diff().dropna()
+    # Compute integer intervals (seconds) directly
+    test_intervals = test_data["timestamp"].diff().dropna().astype(int)
+    ref_intervals = ref_data["timestamp"].diff().dropna().astype(int)
 
+    # Filter out non-positive gaps (duplicates / bad records)
+    test_intervals = test_intervals[test_intervals > 0]
+    ref_intervals = ref_intervals[ref_intervals > 0]
+
+    # Adjust step size if only if both datasets have consistent intervals
     if not test_intervals.empty and not ref_intervals.empty:
-        # Use the most common interval as step size, but ensure it's at least 1 second
-        test_step = (
-            test_intervals.mode().iloc[0] if not test_intervals.mode().empty else 1
-        )
-        ref_step = ref_intervals.mode().iloc[0] if not ref_intervals.mode().empty else 1
-        step_size = max(1, int(min(test_step, ref_step)))
-    else:
-        step_size = 1  # Fallback to 1 second
+        test_steps = set(test_intervals)
+        ref_steps = set(ref_intervals)
+
+        if len(test_steps) == 1 and len(ref_steps) == 1:
+            test_step = next(iter(test_steps))
+            ref_step = next(iter(ref_steps))
+            step_size = math.gcd(test_step, ref_step)
+            logger.info("Step size set to %s seconds", step_size)
 
     best_shift = 0
     best_score = None
