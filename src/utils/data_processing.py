@@ -32,9 +32,9 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Process a FIT file."""
     stream = Stream.from_file(str(file_path))
     decoder = Decoder(stream)
-    messages, _ = decoder.read(  # All defaults, listed for clarity
+    messages, _ = decoder.read(
         apply_scale_and_offset=True,
-        convert_datetimes_to_dates=True,
+        convert_datetimes_to_dates=False,  # Get raw FIT epoch timestamps
         convert_types_to_strings=True,
         enable_crc_check=True,
         expand_sub_fields=True,
@@ -53,23 +53,10 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     # Convert timestamp to epoch (Unix timestamp)
     if "timestamp" in record_df.columns:
-        # Convert to datetime if it's not already
-        if record_df["timestamp"].dtype == "object" and isinstance(
-            record_df["timestamp"].iloc[0], str
-        ):
-            # Already string, convert to datetime first
-            record_df["timestamp"] = pd.to_datetime(record_df["timestamp"], utc=True)
-
-        # Ensure timezone-aware datetime in UTC
-        if record_df["timestamp"].dt.tz is None:
-            # If no timezone info, assume UTC
-            record_df["timestamp"] = record_df["timestamp"].dt.tz_localize("UTC")
-        else:
-            # Convert to UTC timezone
-            record_df["timestamp"] = record_df["timestamp"].dt.tz_convert("UTC")
-
-        # Convert to epoch (Unix timestamp in seconds)
-        record_df["timestamp"] = record_df["timestamp"].astype("int64") // 10**9
+        # FIT epochs need to be converted to Unix epochs
+        # FIT_EPOCH_S = 631065600 (seconds between Unix Epoch and FIT Epoch)
+        FIT_EPOCH_S = 631065600
+        record_df["timestamp"] = record_df["timestamp"] + FIT_EPOCH_S
 
     record_df["filename"] = str(file_path.name)
 

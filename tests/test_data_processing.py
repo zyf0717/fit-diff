@@ -25,11 +25,19 @@ class TestProcessFit:
         mock_decoder = Mock()
         mock_decoder_class.return_value = mock_decoder
 
-        # Mock messages
+        # Mock messages - using FIT epoch timestamps (raw integers when convert_datetimes_to_dates=False)
         mock_messages = {
             "record_mesgs": [
-                {"heart_rate": 150, "speed": 5.5, "timestamp": "2023-01-01T12:00:00Z"},
-                {"heart_rate": 155, "speed": 6.0, "timestamp": "2023-01-01T12:00:01Z"},
+                {
+                    "heart_rate": 150,
+                    "speed": 5.5,
+                    "timestamp": 1041465600,
+                },  # FIT epoch for ~2023-01-01
+                {
+                    "heart_rate": 155,
+                    "speed": 6.0,
+                    "timestamp": 1041465601,
+                },  # FIT epoch for ~2023-01-01 + 1s
             ],
             "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 152}],
         }
@@ -305,20 +313,22 @@ class TestPrepareDataForAnalysis:
         mock_decoder = Mock()
         mock_decoder_class.return_value = mock_decoder
 
-        # Mock FIT messages with UTC timestamps that match CSV after conversion
+        # Mock FIT messages with FIT epoch timestamps (integers)
+        # These should correspond to UTC timestamps that match CSV after conversion
+        # 2023-01-01T04:00:00Z = Unix epoch 1672545600, so FIT epoch = 1672545600 - 631065600 = 1041480000
         mock_messages = {
             "record_mesgs": [
                 {
                     "heart_rate": 148,
-                    "timestamp": "2023-01-01T04:00:00Z",
+                    "timestamp": 1041480000,  # FIT epoch for 2023-01-01T04:00:00Z
                 },  # UTC equivalent of CSV 12:00 GMT+8
                 {
                     "heart_rate": 153,
-                    "timestamp": "2023-01-01T04:00:01Z",
+                    "timestamp": 1041480001,  # FIT epoch for 2023-01-01T04:00:01Z
                 },  # UTC equivalent of CSV 12:01 GMT+8
                 {
                     "heart_rate": 150,
-                    "timestamp": "2023-01-01T04:00:02Z",
+                    "timestamp": 1041480002,  # FIT epoch for 2023-01-01T04:00:02Z
                 },  # UTC equivalent of CSV 12:02 GMT+8
             ],
             "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 150}],

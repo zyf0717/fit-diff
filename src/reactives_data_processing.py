@@ -319,13 +319,11 @@ def create_data_processing_reactives(
             )
 
             # Merge on timestamp to align the data properly
-            aligned_df = pd.merge_asof(
+            aligned_df = pd.merge(
                 test_clean,
                 ref_clean,
                 on="timestamp",
                 suffixes=("_test", "_ref"),
-                # tolerance=pd.Timedelta("250ms"),
-                # direction="nearest",
             ).reset_index(drop=True)
 
             if aligned_df.empty:
