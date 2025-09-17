@@ -63,9 +63,7 @@ def calculate_basic_stats(
     return df_pivot
 
 
-def get_validity_stats(
-    aligned_df: pd.DataFrame, metric: str
-) -> Union[pd.DataFrame, None]:
+def get_bias_stats(aligned_df: pd.DataFrame, metric: str) -> Union[pd.DataFrame, None]:
     """Get bias and agreement statistics using multiple statistical tests."""
     if aligned_df is None or aligned_df.empty:
         return None
@@ -124,7 +122,7 @@ def get_validity_stats(
     return df
 
 
-def get_precision_stats(
+def get_accuracy_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get error magnitude statistics."""
@@ -140,11 +138,20 @@ def get_precision_stats(
     mse = (errors**2).mean()
     rmse = mse**0.5
     std_errors = errors.std()
+    # Mean Absolute Percentage Error (MAPE)
+    # Avoid division by zero by masking zero reference values
+    nonzero_ref = ref_aligned != 0
+    if nonzero_ref.any():
+        mape = (errors[nonzero_ref].abs() / ref_aligned[nonzero_ref].abs()).mean() * 100
+        mape = round(mape, 6)
+    else:
+        mape = None
 
     error_magnitude_stats = {
         "MAE": round(mae, 6),
         "RMSE": round(rmse, 6),
         "MSE": round(mse, 6),
+        "MAPE (%)": mape,
         "Std of Errors": round(std_errors, 6),
     }
 
@@ -190,7 +197,7 @@ def calculate_ccc(x: pd.Series, y: pd.Series) -> float:
     return numerator / denominator if denominator != 0 else 0.0
 
 
-def get_reliability_stats(
+def get_agreement_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
     """Get correlation statistics."""
@@ -209,12 +216,12 @@ def get_reliability_stats(
     # Calculate p-value for Pearson correlation (for reference)
     _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
 
-    reliability_stats = {
+    agreement_stats = {
         "Concordance Correlation Coefficient": round(ccc, 6),
         "Pearson Correlation Coefficient": round(pearson_r, 6),
         "Pearson Correlation P-value": round(r_p_value, 8),
     }
 
     # Convert to transposed DataFrame
-    df = pd.DataFrame(list(reliability_stats.items()), columns=["Metric", "Value"])
+    df = pd.DataFrame(list(agreement_stats.items()), columns=["Metric", "Value"])
     return df

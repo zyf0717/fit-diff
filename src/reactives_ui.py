@@ -2,6 +2,7 @@
 
 import logging
 
+from faicons import icon_svg
 from shiny import Inputs, reactive, render, session, ui
 from shinywidgets import output_widget
 
@@ -99,7 +100,9 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ui.hr(),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Metric Visualization"),
+                            ui.card_header(
+                                "Metric Visualization",
+                            ),
                             output_widget("metricPlot"),
                         ),
                         ui.card(
@@ -110,16 +113,76 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Validity"),
-                            ui.output_data_frame("validityTable"),
+                            ui.card_header(
+                                ui.tooltip(
+                                    ui.span("Bias ", icon_svg("circle-question")),
+                                    ui.HTML(
+                                        """
+        <p><strong>Bias</strong>: Systematic difference between test and reference.</p>
+        <hr>
+        <p><b>Paired t-test p-value:</b> Chance the mean difference is zero (parametric).</p>
+        <p><b>Wilcoxon signed-rank p-value:</b> Chance the median difference is zero (non-parametric, uses ranks).</p>
+        <p><b>Sign test p-value:</b> Chance positives and negatives are equally likely (ignores magnitude).</p>
+        <p><b>Cohen's d:</b> Standardized mean difference relative to variability.</p>
+    """
+                                    ),
+                                    placement="right",
+                                    id="bias_tooltip",
+                                )
+                            ),
+                            ui.output_data_frame("biasTable"),
                         ),
                         ui.card(
-                            ui.card_header("Precision"),
-                            ui.output_data_frame("precisionTable"),
+                            ui.card_header(
+                                ui.tooltip(
+                                    ui.span(
+                                        "Accuracy & Precision ",
+                                        icon_svg("circle-question"),
+                                    ),
+                                    ui.HTML(
+                                        """
+        <p><b>Accuracy</b>: How close measurements are to the true or reference value.</p>
+        <p><b>Precision</b>: How consistent repeated measurements are with each other.</p>
+        <hr>
+        <p><b>Mean Absolute Error (MAE)</b>: Average size of the errors, regardless of direction.</p>
+        <p><b>Root Mean Squared Error (RMSE)</b>: Average size of the errors, giving extra weight to larger errors.</p>
+        <p><b>Mean Squared Error (MSE)</b>: Average of squared errors; combines both bias and variability.</p>
+        <p><b>Mean Absolute Percentage Error (MAPE)</b>: Average size of the errors expressed as a percentage of the reference values.</p>
+        <p><b>Standard Deviation of Errors</b>: How spread out the errors are around their mean; reflects random variability.</p>
+    """
+                                    ),
+                                    placement="right",
+                                    id="accuracy_tooltip",
+                                )
+                            ),
+                            ui.output_data_frame("accuracyTable"),
                         ),
                         ui.card(
-                            ui.card_header("Reliability"),
-                            ui.output_data_frame("reliabilityTable"),
+                            ui.card_header(
+                                ui.tooltip(
+                                    ui.span(
+                                        "Agreement & Reliability ",
+                                        icon_svg("circle-question"),
+                                    ),
+                                    ui.HTML(
+                                        """
+        <p><b>Agreement</b>: How closely two measurement methods produce the same values.
+        It goes beyond correlation by asking if test and reference measurements match in magnitude, not just in trend.</p>
+        <p><b>Reliability</b>: How consistently a method produces the same result under similar conditions.
+        High reliability means low random error across repeated trials or raters.</p>
+        <hr>
+        <p><b>Concordance Correlation Coefficient (CCC)</b>: Combines precision and accuracy into one statistic.
+        High CCC means values are both well correlated and close in absolute scale.</p>
+        <p><b>Pearson Correlation Coefficient</b>: Measures strength of the linear relationship.
+        High correlation means the two move together, but not necessarily that they agree in absolute terms.</p>
+        <p><b>Pearson Correlation p-value</b>: Probability of seeing the observed correlation if the true correlation were zero.</p>
+    """
+                                    ),
+                                    placement="right",
+                                    id="agreement_tooltip",
+                                )
+                            ),
+                            ui.output_data_frame("agreementTable"),
                         ),
                         col_widths=[4, 4, 4],
                     ),

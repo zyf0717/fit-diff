@@ -8,11 +8,11 @@ from shiny import Inputs, reactive, render, ui
 from src.utils import (
     calculate_basic_stats,
     generate_llm_summary_stream,
+    get_accuracy_stats,
+    get_agreement_stats,
+    get_bias_stats,
     get_file_information,
-    get_precision_stats,
     get_raw_data_sample,
-    get_reliability_stats,
-    get_validity_stats,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,27 +31,25 @@ def create_statistics_reactives(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
-    def _get_validity_stats():
+    def _get_bias_stats():
         aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
-        return get_validity_stats(
+        return get_bias_stats(aligned_data, data_reactives["_get_comparison_metric"]())
+
+    def _get_accuracy_stats():
+        aligned_data = data_reactives["_get_data_by_selected_range"]()
+        if aligned_data is None:
+            return pd.DataFrame()
+        return get_accuracy_stats(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
-    def _get_precision_stats():
+    def _get_agreement_stats():
         aligned_data = data_reactives["_get_data_by_selected_range"]()
         if aligned_data is None:
             return pd.DataFrame()
-        return get_precision_stats(
-            aligned_data, data_reactives["_get_comparison_metric"]()
-        )
-
-    def _get_reliability_stats():
-        aligned_data = data_reactives["_get_data_by_selected_range"]()
-        if aligned_data is None:
-            return pd.DataFrame()
-        return get_reliability_stats(
+        return get_agreement_stats(
             aligned_data, data_reactives["_get_comparison_metric"]()
         )
 
@@ -62,21 +60,21 @@ def create_statistics_reactives(
         )
 
     @render.data_frame
-    def validityTable():
+    def biasTable():
         return data_reactives["_safe_execute"](
-            _get_validity_stats, "validityTable", pd.DataFrame()
+            _get_bias_stats, "biasTable", pd.DataFrame()
         )
 
     @render.data_frame
-    def precisionTable():
+    def accuracyTable():
         return data_reactives["_safe_execute"](
-            _get_precision_stats, "precisionTable", pd.DataFrame()
+            _get_accuracy_stats, "accuracyTable", pd.DataFrame()
         )
 
     @render.data_frame
-    def reliabilityTable():
+    def agreementTable():
         return data_reactives["_safe_execute"](
-            _get_reliability_stats, "reliabilityTable", pd.DataFrame()
+            _get_agreement_stats, "agreementTable", pd.DataFrame()
         )
 
     md = ui.MarkdownStream("streamOutput")
@@ -89,9 +87,9 @@ def create_statistics_reactives(
             await md.stream(
                 generate_llm_summary_stream(
                     metric=metric,
-                    validity_stats=_get_validity_stats(),
-                    precision_stats=_get_precision_stats(),
-                    reliability_stats=_get_reliability_stats(),
+                    bias_stats=_get_bias_stats(),
+                    accuracy_stats=_get_accuracy_stats(),
+                    agreement_stats=_get_agreement_stats(),
                 )
             )
         except Exception as e:
@@ -150,13 +148,13 @@ def create_statistics_reactives(
 
     return {
         "_get_stats": _get_stats,
-        "_get_validity_stats": _get_validity_stats,
-        "_get_precision_stats": _get_precision_stats,
-        "_get_reliability_stats": _get_reliability_stats,
+        "_get_bias_stats": _get_bias_stats,
+        "_get_accuracy_stats": _get_accuracy_stats,
+        "_get_agreement_stats": _get_agreement_stats,
         "basicStatsTable": basicStatsTable,
-        "validityTable": validityTable,
-        "precisionTable": precisionTable,
-        "reliabilityTable": reliabilityTable,
+        "biasTable": biasTable,
+        "accuracyTable": accuracyTable,
+        "agreementTable": agreementTable,
         "llm_summary_effect": llm_summary_effect,
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,

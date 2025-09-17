@@ -53,7 +53,7 @@ def server(inputs: Inputs, output: Outputs, session: Session):
 
     # Register statistics reactives
     output.basicStatsTable = statistics_reactives["basicStatsTable"]
-    output.validityTable = statistics_reactives["validityTable"]
-    output.precisionTable = statistics_reactives["precisionTable"]
-    output.reliabilityTable = statistics_reactives["reliabilityTable"]
+    output.biasTable = statistics_reactives["biasTable"]
+    output.accuracyTable = statistics_reactives["accuracyTable"]
+    output.agreementTable = statistics_reactives["agreementTable"]
     output.rawDataTable = statistics_reactives["rawDataTable"]

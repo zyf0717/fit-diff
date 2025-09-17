@@ -18,23 +18,23 @@ LLM_API_URL = os.getenv("LLM_API_URL", "")
 
 def _stats_payload(
     metric: str,
-    validity: pd.DataFrame,
-    precision: pd.DataFrame,
-    reliability: pd.DataFrame,
+    bias: pd.DataFrame,
+    accuracy: pd.DataFrame,
+    agreement: pd.DataFrame,
 ) -> dict:
     return {
         "benchmark_metric": metric,
-        "validity": validity.to_dict(orient="records"),
-        "precision": precision.to_dict(orient="records"),
-        "reliability": reliability.to_dict(orient="records"),
+        "bias": bias.to_dict(orient="records"),
+        "accuracy": accuracy.to_dict(orient="records"),
+        "agreement": agreement.to_dict(orient="records"),
     }
 
 
 async def generate_llm_summary_stream(
     metric: str,
-    validity_stats: pd.DataFrame,
-    precision_stats: pd.DataFrame,
-    reliability_stats: pd.DataFrame,
+    bias_stats: pd.DataFrame,
+    accuracy_stats: pd.DataFrame,
+    agreement_stats: pd.DataFrame,
 ) -> AsyncGenerator[str, None]:
     """
     Stream a model-written summary for the provided statistics.
@@ -42,17 +42,17 @@ async def generate_llm_summary_stream(
     """
     # Guard: require all three stats
     if (
-        validity_stats is None
-        or validity_stats.empty
-        or precision_stats is None
-        or precision_stats.empty
-        or reliability_stats is None
-        or reliability_stats.empty
+        bias_stats is None
+        or bias_stats.empty
+        or accuracy_stats is None
+        or accuracy_stats.empty
+        or agreement_stats is None
+        or agreement_stats.empty
     ):
-        yield "Insufficient statistics: all of validity, precision, and reliability stats must be present and non-empty."
+        yield "Insufficient statistics."
         return
 
-    records = _stats_payload(metric, validity_stats, precision_stats, reliability_stats)
+    records = _stats_payload(metric, bias_stats, accuracy_stats, agreement_stats)
 
     # Build OpenAI-style chat request
     messages = [
@@ -75,7 +75,7 @@ async def generate_llm_summary_stream(
             "content": (
                 "Interpret the following JSON stats for wearable-device benchmarking of "
                 f"{records.get('benchmark_metric', '')}. Consider these sources where present: "
-                "validity, precision, reliability, significance tests, etc.\n\n"
+                "bias, accuracy, agreement, significance tests, etc.\n\n"
                 "Produce a concise summary as instructed above.\n\n"
                 f"Payload (JSON):\n{json.dumps(records, ensure_ascii=False)}"
             ),

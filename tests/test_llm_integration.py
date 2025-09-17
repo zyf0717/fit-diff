@@ -13,17 +13,17 @@ class TestGenerateLLMSummaryStream:
 
     def create_test_stats(self):
         """Create test statistics data."""
-        validity_stats = pd.DataFrame(
+        bias_stats = pd.DataFrame(
             {"Metric": ["Mean Bias", "Cohen's d"], "Value": [2.5, 0.3]}
         )
 
-        precision_stats = pd.DataFrame({"Metric": ["MAE", "RMSE"], "Value": [3.2, 4.1]})
+        accuracy_stats = pd.DataFrame({"Metric": ["MAE", "RMSE"], "Value": [3.2, 4.1]})
 
-        reliability_stats = pd.DataFrame(
+        agreement_stats = pd.DataFrame(
             {"Metric": ["Correlation Coefficient"], "Value": [0.85]}
         )
 
-        return validity_stats, precision_stats, reliability_stats
+        return bias_stats, accuracy_stats, agreement_stats
 
     @pytest.mark.asyncio
     async def test_generate_llm_summary_stream_empty_stats(self):
@@ -56,12 +56,12 @@ class TestGenerateLLMSummaryStream:
     @pytest.mark.asyncio
     async def test_generate_llm_summary_stream_mixed_empty_stats(self):
         """Test LLM summary stream with mixed empty and non-empty stats."""
-        validity_stats, precision_stats, reliability_stats = self.create_test_stats()
+        bias_stats, accuracy_stats, agreement_stats = self.create_test_stats()
 
         # Test with one empty DataFrame
         result_chunks = []
         async for chunk in generate_llm_summary_stream(
-            "heart_rate", validity_stats, pd.DataFrame(), reliability_stats
+            "heart_rate", bias_stats, pd.DataFrame(), agreement_stats
         ):
             result_chunks.append(chunk)
 
