@@ -366,10 +366,6 @@ def create_data_processing_reactives(
             logger.error("_get_data_by_selected_range: aligned_df is empty or None")
             return pd.DataFrame()
 
-        logger.info(
-            "_get_data_by_selected_range columns: %s", aligned_df.columns.tolist()
-        )
-
         # Apply x-axis range filtering if set
         # Access the reactive value properly to establish dependency
         x_range = None
