@@ -41,13 +41,13 @@ class TestCalculateBasicStats:
         # Verify
         assert result is not None
         assert isinstance(result, pd.DataFrame)
-        assert "-" in result.columns
+        assert "heart_rate" in result.columns
         assert "test" in result.columns
         assert "reference" in result.columns
 
         # Check that expected stats are present
-        stats = result["-"].tolist()
-        expected_stats = ["metric", "count", "mean", "std", "min", "max", "median"]
+        stats = result["heart_rate"].tolist()
+        expected_stats = ["count", "mean", "std", "min", "max", "median"]
         for stat in expected_stats:
             assert stat in stats
 
