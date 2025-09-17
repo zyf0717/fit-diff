@@ -115,8 +115,16 @@ def create_visualization_reactives(
             aligned_data = data_reactives["_get_data_by_selected_range"]()
             if aligned_data is None:
                 return None
+
+            # Get rolling window size from input
+            window_size = data_reactives["_safe_get_input"](
+                lambda: inputs.rolling_window_size(), default=50
+            )
+
             return create_rolling_error_plot(
-                aligned_data, data_reactives["_get_comparison_metric"]()
+                aligned_data,
+                data_reactives["_get_comparison_metric"](),
+                window_size=window_size,
             )
 
         return data_reactives["_safe_execute"](
