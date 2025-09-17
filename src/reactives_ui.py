@@ -166,16 +166,13 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                                     ),
                                     ui.HTML(
                                         """
-        <p><b>Agreement</b>: How closely two measurement methods produce the same values.
-        It goes beyond correlation by asking if test and reference measurements match in magnitude, not just in trend.</p>
-        <p><b>Reliability</b>: How consistently a method produces the same result under similar conditions.
-        High reliability means low random error across repeated trials or raters.</p>
+        <p><b>Agreement</b>: How closely two measurement methods produce the same values.</p>
+        <p><b>Reliability</b>: How consistently a method produces the same result under similar conditions.</p>
         <hr>
-        <p><b>Concordance Correlation Coefficient (CCC)</b>: Combines precision and accuracy into one statistic.
-        High CCC means values are both well correlated and close in absolute scale.</p>
-        <p><b>Pearson Correlation Coefficient</b>: Measures strength of the linear relationship.
-        High correlation means the two move together, but not necessarily that they agree in absolute terms.</p>
+        <p><b>Concordance Correlation Coefficient (CCC)</b>: A single statistic that reflects both correlation and closeness in scale between test and reference values.</p>
+        <p><b>Pearson Correlation Coefficient</b>: Captures how strongly test and reference move together linearly, without requiring their values to match in magnitude.</p>
         <p><b>Pearson Correlation p-value</b>: Probability of seeing the observed correlation if the true correlation were zero.</p>
+        <p><b>Limits of Agreement (LoA)</b>: Range where most differences between test and reference measurements fall, shown as mean bias ± 1.96 × SD of errors.</p>
     """
                                     ),
                                     placement="right",

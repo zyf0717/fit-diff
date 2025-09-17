@@ -216,10 +216,19 @@ def get_agreement_stats(
     # Calculate p-value for Pearson correlation (for reference)
     _, r_p_value = stats.pearsonr(test_aligned, ref_aligned)
 
+    # Calculate Limits of Agreement (LoA)
+    errors = test_aligned - ref_aligned
+    bias = errors.mean()
+    std_err = errors.std()
+    loa_lower = bias - 1.96 * std_err
+    loa_upper = bias + 1.96 * std_err
+
     agreement_stats = {
         "Concordance Correlation Coefficient": round(ccc, 6),
         "Pearson Correlation Coefficient": round(pearson_r, 6),
         "Pearson Correlation P-value": round(r_p_value, 8),
+        "LoA Lower": round(loa_lower, 6),
+        "LoA Upper": round(loa_upper, 6),
     }
 
     # Convert to transposed DataFrame
