@@ -2,9 +2,11 @@
 
 A comprehensive Shiny Python web application primarily for comparing FIT files from fitness devices. This tool provides statistical analysis, interactive visualizations, and LLM-powered insights for fitness data.
 
+Note: This project is in active development. Features and interfaces may change frequently.
+
 ## Core Features
 
-- **Interactive Web Interface**: Upload and compare multiple FIT files
+- **Interactive Web Interface**: Upload and compare multiple FIT files, with partial CSV support
 - **Statistical Analysis**: Bias, accuracy, agreement etc.
 - **Interactive Visualizations**: Dynamic plots with zoom, pan, and selection capabilities
 
@@ -119,6 +121,7 @@ fit-diff/
 ### Adding New Features
 
 1. **Data Processing**: Add new parsers or metrics in `src/utils/data_processing.py`
-1. **Statistics**: Implement new statistical methods in `src/utils/statistics.py`
-1. **Visualizations**: Create new plot types in `src/utils/visualizations.py`
-1. **UI Components**: Add reactive components in the appropriate `src/reactives_*.py` module
+2. **Statistics**: Implement new statistical methods in `src/utils/statistics.py`
+3. **Visualizations**: Create new plot types in `src/utils/visualizations.py`
+4. **UI Components**: Add reactive components in the appropriate `src/reactives_*.py` module, and update `src/reactives_ui.py` accordingly
+5. **Server Orchestration**: Update `src/app_server.py` to integrate all new additions into the reactive flow of the app
