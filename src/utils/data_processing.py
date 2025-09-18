@@ -196,15 +196,13 @@ def prepare_data_for_analysis(
     common_timestamps = test_timestamps.intersection(ref_timestamps)
 
     if not common_timestamps:
-        return None
+        return pd.DataFrame(), pd.DataFrame()
 
-    # Find the first common timestamp across all data
-    first_common_timestamp = min(common_timestamps)
-
-    # Generate elapsed_seconds starting from the first common timestamp
-    # Both test and reference data will start elapsed_seconds = 0 from the same timestamp
+    # Elapsed seconds based on first common timestamp per test-reference pair
     for df in [test_data_df, ref_data_df]:
-        df["elapsed_seconds"] = df["timestamp"] - first_common_timestamp
+        df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
+            lambda x: x - x[x.isin(common_timestamps)].min()
+        )
 
     return test_data_df, ref_data_df
 

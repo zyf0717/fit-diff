@@ -61,11 +61,7 @@ def create_data_processing_reactives(
     @reactive.Calc
     def _get_trimmed_data():
         try:
-            prepared_data = _get_test_and_ref_data()
-            if not prepared_data or len(prepared_data) != 2:
-                return pd.DataFrame(), pd.DataFrame()
-
-            test_data, ref_data = prepared_data
+            test_data, ref_data = _get_test_and_ref_data()
             if test_data.empty or ref_data.empty:
                 return pd.DataFrame(), pd.DataFrame()
 
@@ -308,7 +304,7 @@ def create_data_processing_reactives(
 
             # Get clean data
             test_clean = (
-                test_data[["timestamp", "elapsed_seconds", metric]]
+                test_data[["timestamp", "elapsed_seconds", "filename", metric]]
                 .dropna()
                 .reset_index(drop=True)
             )
@@ -328,6 +324,14 @@ def create_data_processing_reactives(
 
             if aligned_df.empty:
                 return None
+
+            # Add start_datetime column for reference
+            aligned_df["start_datetime"] = aligned_df.groupby("filename")[
+                "timestamp"
+            ].transform("min")
+            aligned_df["start_datetime"] = pd.to_datetime(
+                aligned_df["start_datetime"], unit="s"
+            )
 
             # Calculate differences for outlier removal
             aligned_df["difference"] = (

@@ -15,47 +15,62 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
 
     fig = go.Figure()
 
-    # Track if averaging occurred for either test or reference
-    averaging_happened = False
+    # Get unique start_datetime to plot each pair separately
+    if "start_datetime" in aligned_df.columns:
+        start_datetimes = aligned_df["start_datetime"].unique()
 
-    # Add trend lines for both test and reference data
-    for source_name, col_suffix in [("test", "_test"), ("reference", "_ref")]:
-        metric_col = f"{metric}{col_suffix}"
-        elapsed_col = f"elapsed_seconds{col_suffix}"
+        for start_datetime in start_datetimes:
+            # Filter data for this specific start_datetime
+            file_data = aligned_df[aligned_df["start_datetime"] == start_datetime]
 
-        if metric_col in aligned_df.columns and elapsed_col in aligned_df.columns:
-            temp_df = aligned_df[[elapsed_col, metric_col]].dropna()
-            if not temp_df.empty:
-                # Check if any elapsed_seconds value is duplicated (i.e., averaging will occur)
-                rounded = temp_df[elapsed_col].round()
-                if rounded.duplicated().any():
-                    averaging_happened = True
-                mean_per_second = (
-                    temp_df.groupby(rounded)[metric_col].mean().reset_index()
-                )
-                mean_per_second.rename(
-                    columns={elapsed_col: "elapsed_seconds"}, inplace=True
-                )
+            if not file_data.empty:
+                # Plot test data for this start_datetime
+                test_col = f"{metric}_test"
+                ref_col = f"{metric}_ref"
+                elapsed_test_col = f"elapsed_seconds_test"
+                elapsed_ref_col = f"elapsed_seconds_ref"
 
-                if not mean_per_second.empty:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=mean_per_second["elapsed_seconds"],
-                            y=mean_per_second[metric_col],
-                            mode="lines",
-                            name=f"{source_name}",
-                            line=dict(width=2),
-                            opacity=0.75,
+                # Add test line
+                if (
+                    test_col in file_data.columns
+                    and elapsed_test_col in file_data.columns
+                ):
+                    test_data = file_data[[elapsed_test_col, test_col]].dropna()
+                    if not test_data.empty:
+                        test_data = test_data.sort_values(elapsed_test_col)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=test_data[elapsed_test_col],
+                                y=test_data[test_col],
+                                mode="lines",
+                                name=f"{start_datetime} (test)",
+                                opacity=0.8,
+                                line=dict(width=2),
+                            )
                         )
-                    )
 
-    if averaging_happened:
-        yaxis_title = f"Mean {metric.replace('_', ' ').title()}"
-    else:
-        yaxis_title = metric.replace("_", " ").title()
+                # Add reference line
+                if (
+                    ref_col in file_data.columns
+                    and elapsed_ref_col in file_data.columns
+                ):
+                    ref_data = file_data[[elapsed_ref_col, ref_col]].dropna()
+                    if not ref_data.empty:
+                        ref_data = ref_data.sort_values(elapsed_ref_col)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=ref_data[elapsed_ref_col],
+                                y=ref_data[ref_col],
+                                mode="lines",
+                                name=f"{start_datetime} (ref)",
+                                opacity=0.8,
+                                line=dict(width=2),
+                            )
+                        )
+
     fig.update_layout(
         xaxis_title="Elapsed Seconds",
-        yaxis_title=yaxis_title,
+        yaxis_title=metric.replace("_", " ").title(),
         hovermode="x unified",
     )
     return fig
