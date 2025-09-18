@@ -1,6 +1,6 @@
 # FIT File Analysis Tool
 
-A comprehensive Shiny Python web application for analyzing, comparing, and benchmarking FIT files from fitness devices. This tool provides advanced statistical analysis, interactive visualizations, and LLM-powered insights for fitness data.
+A comprehensive Shiny Python web application primarily for comparing FIT files from fitness devices. This tool provides statistical analysis, interactive visualizations, and LLM-powered insights for fitness data.
 
 ## Core Features
 
