@@ -98,7 +98,7 @@ pytest tests/test_visualizations.py
 
 ```text
 fit-diff/
-├── src/                          # Main application source code
+├── src/                         # Main application source code
 │   ├── app_server.py            # Shiny server logic and reactive coordination
 │   ├── app_ui.py                # User interface definition and layout
 │   ├── reactives_*.py           # Reactive modules for different features
@@ -108,12 +108,12 @@ fit-diff/
 │       ├── visualizations.py    # Plot generation and styling
 │       └── llm_integration.py   # AI-powered analysis (optional)
 ├── tests/                       # Test suite
-│   ├── fixtures/               # Sample FIT files for testing
-│   └── test_*.py               # Unit tests for each module
-├── sandbox/                    # Development experiments and notebooks
-├── fit_diff.py                 # Main application entry point
-├── benchmark_fit_parsers.py    # Parser performance comparison tool
-└── environment.yml             # Conda environment specification
+│   ├── fixtures/                # Sample FIT files for testing
+│   └── test_*.py                # Unit tests for each module
+├── sandbox/                     # Development experiments and notebooks
+├── fit_diff.py                  # Main application entry point
+├── benchmark_fit_parsers.py     # Parser performance comparison tool
+└── environment.yml              # Conda environment specification
 ```
 
 ### Adding New Features
