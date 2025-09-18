@@ -376,7 +376,12 @@ def create_data_processing_reactives(
         if metric_plot_x_range is not None:
             x_range = metric_plot_x_range.get()
 
+        y_range = None
+        if metric_plot_y_range is not None:
+            y_range = metric_plot_y_range.get()
+
         aligned_df = aligned_df.copy()  # Need to copy before filtering
+
         if x_range and len(x_range) == 2:
             start, end = x_range
             before_count = len(aligned_df)
@@ -397,6 +402,29 @@ def create_data_processing_reactives(
             if aligned_df.empty:
                 logger.warning("X-axis range filtering resulted in empty dataset")
                 return pd.DataFrame()
+
+        if y_range and len(y_range) == 2:
+            y_start, y_end = y_range
+            before_count = len(aligned_df)
+            metric = _get_comparison_metric()
+            aligned_df = aligned_df[
+                (aligned_df[f"{metric}_test"] >= float(y_start))
+                & (aligned_df[f"{metric}_test"] <= float(y_end))
+            ]
+            logger.info(
+                "Applied y-axis range filter: [%s, %s] units",
+                y_start,
+                y_end,
+            )
+            logger.info(
+                "Kept %s / %s rows after y-axis range filtering",
+                len(aligned_df),
+                before_count,
+            )
+            if aligned_df.empty:
+                logger.warning("Y-axis range filtering resulted in empty dataset")
+                return pd.DataFrame()
+
         return aligned_df
 
     # Helper functions for error handling and data validation
