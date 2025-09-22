@@ -218,7 +218,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ),
                 ),
                 ui.nav_panel(
-                    "Data Info",
+                    "Sample Data",
                     ui.card(
                         ui.card_header("File Information"),
                         ui.output_data_frame("fileInfoTable"),
@@ -236,7 +236,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         ui.output_data_frame("rawDataTable"),
                     ),
                 ),
-                title="FIT File Comparison Tool",
+                title="",
             ),
         )
 

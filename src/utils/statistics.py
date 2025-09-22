@@ -9,6 +9,42 @@ import pandas as pd
 from scipy import stats
 
 
+def format_p_value(p_value: float) -> str:
+    """
+    Format p-value according to standard conventions:
+    - If p < 0.001: return "<0.001"
+    - Otherwise: return p-value with 3 decimal places
+
+    Args:
+        p_value: The p-value to format
+
+    Returns:
+        Formatted p-value string
+    """
+    if np.isnan(p_value):
+        return "N/A"
+    if p_value < 0.001:
+        return "<0.001"
+    else:
+        return f"{p_value:.3f}"
+
+
+def format_number(value: float, decimal_places: int) -> str:
+    """
+    Format a number with fixed decimal places, padding with zeros if necessary.
+
+    Args:
+        value: The number to format
+        decimal_places: Number of decimal places to show
+
+    Returns:
+        Formatted number string with zero padding
+    """
+    if np.isnan(value):
+        return "N/A"
+    return f"{value:.{decimal_places}f}"
+
+
 def calculate_basic_stats(
     aligned_df: pd.DataFrame, metric: str
 ) -> Union[pd.DataFrame, None]:
@@ -49,7 +85,7 @@ def calculate_basic_stats(
     if not stats_list:
         return None
 
-    df = pd.DataFrame(stats_list).round(2)
+    df = pd.DataFrame(stats_list).round(3)
 
     # Set 'device' as columns, 'stat' as index
     df_pivot = df.set_index("device").T
@@ -107,15 +143,15 @@ def get_bias_stats(aligned_df: pd.DataFrame, metric: str) -> Union[pd.DataFrame,
 
     # Assemble results
     rows = [
-        ("Mean Bias", round(bias, 6)),
-        # ("Two-sample K–S test p-value", round(ks_p_val, 8)),
-        ("Paired t-test p-value", round(t_p_val, 8)),
-        ("Wilcoxon signed-rank p-value", round(w_p_val, 8)),
+        ("Mean Bias", format_number(bias, 3)),
+        # ("Two-sample K–S test p-value", format_p_value(ks_p_val)),
+        ("Paired t-test p-value", format_p_value(t_p_val)),
+        ("Wilcoxon signed-rank p-value", format_p_value(w_p_val)),
         (
             "Sign test p-value",
-            round(sign_p_val, 8) if not np.isnan(sign_p_val) else "N/A",
+            format_p_value(sign_p_val),
         ),
-        ("Cohen's d", round(cohens_d, 6) if not np.isnan(cohens_d) else "N/A"),
+        ("Cohen's d", format_number(cohens_d, 3) if not np.isnan(cohens_d) else "N/A"),
     ]
 
     df = pd.DataFrame(rows, columns=["Metric", "Value"])
@@ -143,16 +179,16 @@ def get_accuracy_stats(
     nonzero_ref = ref_aligned != 0
     if nonzero_ref.any():
         mape = (errors[nonzero_ref].abs() / ref_aligned[nonzero_ref].abs()).mean() * 100
-        mape = round(mape, 6)
+        mape = format_number(mape, 3)
     else:
         mape = None
 
     error_magnitude_stats = {
-        "MAE": round(mae, 6),
-        "RMSE": round(rmse, 6),
-        "MSE": round(mse, 6),
+        "MAE": format_number(mae, 3),
+        "RMSE": format_number(rmse, 3),
+        "MSE": format_number(mse, 3),
         "MAPE (%)": mape,
-        "Std of Errors": round(std_errors, 6),
+        "Std of Errors": format_number(std_errors, 3),
     }
 
     # Convert to transposed DataFrame
@@ -224,11 +260,11 @@ def get_agreement_stats(
     loa_upper = bias + 1.96 * std_err
 
     agreement_stats = {
-        "Concordance Correlation Coefficient": round(ccc, 6),
-        "Pearson Correlation Coefficient": round(pearson_r, 6),
-        "Pearson Correlation P-value": round(r_p_value, 8),
-        "LoA Lower": round(loa_lower, 6),
-        "LoA Upper": round(loa_upper, 6),
+        "Concordance Correlation Coefficient": format_number(ccc, 3),
+        "Pearson Correlation Coefficient": format_number(pearson_r, 3),
+        "Pearson Correlation P-value": format_p_value(r_p_value),
+        "LoA Lower": format_number(loa_lower, 3),
+        "LoA Upper": format_number(loa_upper, 3),
     }
 
     # Convert to transposed DataFrame

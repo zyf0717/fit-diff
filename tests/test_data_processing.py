@@ -280,7 +280,8 @@ class TestPrepareDataForAnalysis:
         result = prepare_data_for_analysis((test_df, ref_df), "heart_rate")
 
         # Verify
-        assert result is None
+        assert result[0].empty
+        assert result[1].empty
 
     def test_prepare_data_invalid_input(self):
         """Test data preparation with invalid input."""
