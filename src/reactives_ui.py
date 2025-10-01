@@ -30,7 +30,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             # Navigation bar with different panels
             ui.navset_bar(
                 ui.nav_panel(
-                    "Analysis",
+                    "Benchmarking",
                     ui.layout_columns(
                         ui.output_ui("testFileSelector"),
                         ui.output_ui("refFileSelector"),
@@ -235,6 +235,12 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                         ),
                         ui.output_data_frame("rawDataTable"),
                     ),
+                ),
+                ui.nav_panel(
+                    "Anomaly Processing",
+                ),
+                ui.nav_panel(
+                    "Batch Analysis",
                 ),
                 title="",
             ),
