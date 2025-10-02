@@ -150,41 +150,55 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     return session_df, record_df
 
 
-def prepare_data_for_analysis(
-    all_fit_data: tuple, metric: str
-) -> Union[Tuple[pd.DataFrame, pd.DataFrame], None]:
-    """Prepare test and reference data for analysis, keeping them separate."""
-    if (
-        not all_fit_data
-        or not isinstance(all_fit_data, tuple)
-        or len(all_fit_data) != 2
-    ):
-        return None
-
-    test_data_df, ref_data_df = all_fit_data
-    if test_data_df.empty or ref_data_df.empty:
-        return None
-
+def _get_required_columns(df: pd.DataFrame, metric: str) -> list:
+    """Get list of required columns for analysis, including supplementary columns."""
     required_cols = ["timestamp", "filename", metric]
 
     # Supplementary cadence column needed by downstream filters (e.g. HR ≈ 2 × cadence)
     supplementary = []
-    if "cadence" in test_data_df.columns and metric == "heart_rate":
+    if "cadence" in df.columns and metric == "heart_rate":
         supplementary.append("cadence")
 
-    # Build final column lists per dataframe guarding for missing columns
-    def _final_cols(df):
-        cols = []
-        for c in required_cols + supplementary:
-            if c in df.columns and c not in cols:
-                cols.append(c)
-        return cols
+    # Build final column list guarding for missing columns
+    cols = []
+    for c in required_cols + supplementary:
+        if c in df.columns and c not in cols:
+            cols.append(c)
+    return cols
 
-    test_cols = _final_cols(test_data_df)
-    ref_cols = _final_cols(ref_data_df)
 
-    test_data_df = test_data_df[test_cols].copy()
-    ref_data_df = ref_data_df[ref_cols].copy()
+def _prepare_single_dataframe(df: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """Prepare a single DataFrame for analysis."""
+    data_df = df.copy()
+
+    # Select required columns
+    required_cols = _get_required_columns(data_df, metric)
+    data_df = data_df[required_cols].copy()
+
+    # Ensure filename is string type
+    data_df["filename"] = data_df["filename"].astype(str)
+
+    # Add elapsed seconds based on first timestamp per file
+    data_df["elapsed_seconds"] = data_df.groupby("filename")["timestamp"].transform(
+        lambda x: x - x.min()
+    )
+
+    return data_df
+
+
+def _prepare_comparison_dataframes(
+    test_df: pd.DataFrame, ref_df: pd.DataFrame, metric: str
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Prepare two DataFrames for comparison analysis with common timestamp alignment."""
+    if test_df.empty or ref_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Select required columns for both dataframes
+    test_cols = _get_required_columns(test_df, metric)
+    ref_cols = _get_required_columns(ref_df, metric)
+
+    test_data_df = test_df[test_cols].copy()
+    ref_data_df = ref_df[ref_cols].copy()
 
     # Ensure filename is string type
     test_data_df["filename"] = test_data_df["filename"].astype(str)
@@ -205,6 +219,36 @@ def prepare_data_for_analysis(
         )
 
     return test_data_df, ref_data_df
+
+
+def prepare_data_for_analysis(
+    all_fit_data: Union[tuple, pd.DataFrame], metric: str
+) -> Union[Tuple[pd.DataFrame, pd.DataFrame], pd.DataFrame, None]:
+    """
+    Prepare data for analysis.
+
+    Args:
+        all_fit_data: Either a tuple of (test_data_df, ref_data_df) for comparison analysis,
+                     or a single DataFrame for single-file analysis
+        metric: The metric column name to analyze
+
+    Returns:
+        - For tuple input: (test_data_df, ref_data_df) with common timestamps and elapsed_seconds
+        - For DataFrame input: Single processed DataFrame with elapsed_seconds
+        - None if invalid input
+    """
+    # Handle single DataFrame input
+    if isinstance(all_fit_data, pd.DataFrame):
+        if all_fit_data.empty:
+            return None
+        return _prepare_single_dataframe(all_fit_data, metric)
+
+    # Handle tuple input for comparison analysis
+    if not isinstance(all_fit_data, tuple) or len(all_fit_data) != 2:
+        return None
+
+    test_data_df, ref_data_df = all_fit_data
+    return _prepare_comparison_dataframes(test_data_df, ref_data_df, metric)
 
 
 def remove_outliers(

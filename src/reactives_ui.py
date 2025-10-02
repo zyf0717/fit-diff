@@ -27,97 +27,93 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             )
 
         return ui.div(
-            # Navigation bar with different panels
-            ui.navset_bar(
-                ui.nav_panel(
-                    "Benchmarking",
-                    ui.layout_columns(
-                        ui.output_ui("testFileSelector"),
-                        ui.output_ui("refFileSelector"),
-                        ui.output_ui("comparisonMetricSelector"),
-                        ui.layout_columns(
-                            ui.input_select(
-                                "metric_range",
-                                "Select metric range:",
-                                choices=[
-                                    "All",
-                                    "Range",
-                                    # "HR ≈ step cadence",
-                                ],
-                                selected="All",
-                            ),
-                            ui.input_numeric(
-                                id="metric_range_lower",
-                                label="Lower:",
-                                value=None,
-                                step=1,
-                                update_on="blur",
-                            ),
-                            ui.input_numeric(
-                                id="metric_range_upper",
-                                label="Upper:",
-                                value=None,
-                                step=1,
-                                update_on="blur",
-                            ),
-                            col_widths=[6, 3, 3],
-                        ),
-                        # ui.output_ui("outlierRemovalSelector"),
-                        col_widths=[3, 3, 3, 3],
+            ui.layout_columns(
+                ui.output_ui("testFileSelector"),
+                ui.output_ui("refFileSelector"),
+                ui.output_ui("comparisonMetricSelector"),
+                ui.layout_columns(
+                    ui.input_select(
+                        "metric_range",
+                        "Select metric range:",
+                        choices=[
+                            "All",
+                            "Range",
+                            # "HR ≈ step cadence",
+                        ],
+                        selected="All",
                     ),
-                    ui.layout_columns(
-                        ui.input_numeric(
-                            id="time_range_start",
-                            label="Start time (elapsed seconds):",
-                            value=None,
-                            min=0,
-                            step=1,
-                            update_on="blur",
-                        ),
-                        ui.input_numeric(
-                            id="time_range_end",
-                            label="End time (elapsed seconds):",
-                            value=None,
-                            min=0,
-                            step=1,
-                            update_on="blur",
-                        ),
-                        ui.output_ui("shiftSecondsSelector"),
-                        ui.input_select(
-                            "auto_shift_method",
-                            "Auto-shift by:",
-                            choices=[
-                                "None (manual)",
-                                "Minimize MAE",
-                                "Minimize MSE",
-                                "Maximize Concordance Correlation",
-                                "Maximize Pearson Correlation",
-                            ],
-                            selected="None (manual)",
-                        ),
-                        col_widths=[3, 3, 3, 3],
+                    ui.input_numeric(
+                        id="metric_range_lower",
+                        label="Lower:",
+                        value=None,
+                        step=1,
+                        update_on="blur",
                     ),
-                    ui.hr(),
-                    ui.layout_columns(
-                        ui.card(
-                            ui.card_header(
-                                "Metric Visualization",
-                            ),
-                            output_widget("metricPlot"),
-                        ),
-                        ui.card(
-                            ui.card_header("Data Overview"),
-                            ui.output_data_frame("basicStatsTable"),
-                        ),
-                        col_widths=[9, 3],
+                    ui.input_numeric(
+                        id="metric_range_upper",
+                        label="Upper:",
+                        value=None,
+                        step=1,
+                        update_on="blur",
                     ),
-                    ui.layout_columns(
-                        ui.card(
-                            ui.card_header(
-                                ui.tooltip(
-                                    ui.span("Bias ", icon_svg("circle-question")),
-                                    ui.HTML(
-                                        """
+                    col_widths=[6, 3, 3],
+                ),
+                # ui.output_ui("outlierRemovalSelector"),
+                col_widths=[3, 3, 3, 3],
+            ),
+            ui.layout_columns(
+                ui.input_numeric(
+                    id="time_range_start",
+                    label="Start time (elapsed seconds):",
+                    value=None,
+                    min=0,
+                    step=1,
+                    update_on="blur",
+                ),
+                ui.input_numeric(
+                    id="time_range_end",
+                    label="End time (elapsed seconds):",
+                    value=None,
+                    min=0,
+                    step=1,
+                    update_on="blur",
+                ),
+                ui.output_ui("shiftSecondsSelector"),
+                ui.input_select(
+                    "auto_shift_method",
+                    "Auto-shift by:",
+                    choices=[
+                        "None (manual)",
+                        "Minimize MAE",
+                        "Minimize MSE",
+                        "Maximize Concordance Correlation",
+                        "Maximize Pearson Correlation",
+                    ],
+                    selected="None (manual)",
+                ),
+                col_widths=[3, 3, 3, 3],
+            ),
+            ui.hr(),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header(
+                        "Metric Visualization",
+                    ),
+                    output_widget("metricPlot"),
+                ),
+                ui.card(
+                    ui.card_header("Data Overview"),
+                    ui.output_data_frame("basicStatsTable"),
+                ),
+                col_widths=[9, 3],
+            ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header(
+                        ui.tooltip(
+                            ui.span("Bias ", icon_svg("circle-question")),
+                            ui.HTML(
+                                """
         <p><strong>Bias</strong>: Systematic difference between test and reference.</p>
         <hr>
         <p><b>Paired t-test p-value:</b> Chance the mean difference is zero (parametric).</p>
@@ -125,22 +121,22 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         <p><b>Sign test p-value:</b> Chance positives and negatives are equally likely (ignores magnitude).</p>
         <p><b>Cohen's d:</b> Standardized mean difference relative to variability.</p>
     """
-                                    ),
-                                    placement="right",
-                                    id="bias_tooltip",
-                                )
                             ),
-                            ui.output_data_frame("biasTable"),
-                        ),
-                        ui.card(
-                            ui.card_header(
-                                ui.tooltip(
-                                    ui.span(
-                                        "Accuracy & Precision ",
-                                        icon_svg("circle-question"),
-                                    ),
-                                    ui.HTML(
-                                        """
+                            placement="right",
+                            id="bias_tooltip",
+                        )
+                    ),
+                    ui.output_data_frame("biasTable"),
+                ),
+                ui.card(
+                    ui.card_header(
+                        ui.tooltip(
+                            ui.span(
+                                "Accuracy & Precision ",
+                                icon_svg("circle-question"),
+                            ),
+                            ui.HTML(
+                                """
         <p><b>Accuracy</b>: How close measurements are to the true or reference value.</p>
         <p><b>Precision</b>: How consistent repeated measurements are with each other.</p>
         <hr>
@@ -150,22 +146,22 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         <p><b>Mean Absolute Percentage Error (MAPE)</b>: Average size of the errors expressed as a percentage of the reference values.</p>
         <p><b>Standard Deviation of Errors</b>: How spread out the errors are around their mean; reflects random variability.</p>
     """
-                                    ),
-                                    placement="right",
-                                    id="accuracy_tooltip",
-                                )
                             ),
-                            ui.output_data_frame("accuracyTable"),
-                        ),
-                        ui.card(
-                            ui.card_header(
-                                ui.tooltip(
-                                    ui.span(
-                                        "Agreement & Reliability ",
-                                        icon_svg("circle-question"),
-                                    ),
-                                    ui.HTML(
-                                        """
+                            placement="right",
+                            id="accuracy_tooltip",
+                        )
+                    ),
+                    ui.output_data_frame("accuracyTable"),
+                ),
+                ui.card(
+                    ui.card_header(
+                        ui.tooltip(
+                            ui.span(
+                                "Agreement & Reliability ",
+                                icon_svg("circle-question"),
+                            ),
+                            ui.HTML(
+                                """
         <p><b>Agreement</b>: How closely two measurement methods produce the same values.</p>
         <p><b>Reliability</b>: How consistently a method produces the same result under similar conditions.</p>
         <hr>
@@ -174,76 +170,62 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         <p><b>Pearson Correlation p-value</b>: Probability of seeing the observed correlation if the true correlation were zero.</p>
         <p><b>Limits of Agreement (LoA)</b>: Range where most differences between test and reference measurements fall, shown as mean bias ± 1.96 × SD of errors.</p>
     """
-                                    ),
-                                    placement="right",
-                                    id="agreement_tooltip",
-                                )
                             ),
-                            ui.output_data_frame("agreementTable"),
-                        ),
-                        col_widths=[4, 4, 4],
+                            placement="right",
+                            id="agreement_tooltip",
+                        )
                     ),
-                    ui.card(
-                        ui.card_header("LLM Generated Explanation"),
-                        ui.layout_columns(
-                            ui.input_action_button("llm_summary_regen", "Ask BotBot!"),
-                            ui.output_markdown_stream(
-                                "streamOutput", auto_scroll=False
-                            ),
-                            col_widths=[3, 9],
-                        ),
-                    ),
-                    ui.layout_columns(
-                        ui.card(
-                            ui.card_header("Error Distribution Histogram"),
-                            output_widget("errorHistogramPlot"),
-                        ),
-                        ui.card(
-                            ui.card_header("Bland-Altman Plot"),
-                            output_widget("blandAltmanPlot"),
-                        ),
-                        col_widths=[6, 6],
-                    ),
-                    ui.card(
-                        ui.card_header("Rolling Error / Time-Varying Bias"),
-                        ui.input_slider(
-                            "rolling_window_size",
-                            "Rolling window size (data points)",
-                            min=10,
-                            max=200,
-                            value=50,
-                            step=10,
-                        ),
-                        output_widget("rollingErrorPlot"),
-                    ),
+                    ui.output_data_frame("agreementTable"),
                 ),
-                ui.nav_panel(
-                    "Sample Data",
-                    ui.card(
-                        ui.card_header("File Information"),
-                        ui.output_data_frame("fileInfoTable"),
-                    ),
-                    ui.card(
-                        ui.card_header("Raw Data Sample"),
-                        ui.input_slider(
-                            "raw_data_sample_size",
-                            "Sample size",
-                            min=50,
-                            max=500,
-                            value=100,
-                            step=50,
-                        ),
-                        ui.output_data_frame("rawDataTable"),
-                    ),
-                ),
-                ui.nav_panel(
-                    "Anomaly Processing",
-                ),
-                ui.nav_panel(
-                    "Batch Analysis",
-                ),
-                title="",
+                col_widths=[4, 4, 4],
             ),
+            ui.card(
+                ui.card_header("LLM Generated Explanation"),
+                ui.layout_columns(
+                    ui.input_action_button("llm_summary_regen", "Ask BotBot!"),
+                    ui.output_markdown_stream("streamOutput", auto_scroll=False),
+                    col_widths=[3, 9],
+                ),
+            ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Error Distribution Histogram"),
+                    output_widget("errorHistogramPlot"),
+                ),
+                ui.card(
+                    ui.card_header("Bland-Altman Plot"),
+                    output_widget("blandAltmanPlot"),
+                ),
+                col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("Rolling Error / Time-Varying Bias"),
+                ui.input_slider(
+                    "rolling_window_size",
+                    "Rolling window size (data points)",
+                    min=10,
+                    max=200,
+                    value=50,
+                    step=10,
+                ),
+                output_widget("rollingErrorPlot"),
+            ),
+            # ui.card(
+            #     ui.card_header("File Information"),
+            #     ui.output_data_frame("fileInfoTable"),
+            # ),
+            # ui.card(
+            #     ui.card_header("Raw Data Sample"),
+            #     ui.input_slider(
+            #         "raw_data_sample_size",
+            #         "Sample size",
+            #         min=50,
+            #         max=500,
+            #         value=100,
+            #         step=50,
+            #     ),
+            #     ui.output_data_frame("rawDataTable"),
+            # ),
         )
 
     @render.ui

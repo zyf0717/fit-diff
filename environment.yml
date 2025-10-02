@@ -22,3 +22,4 @@ dependencies:
       - fitparse
       - garmin-fit-sdk==21.171.0
       - faicons==0.2.2
+      - nbformat>=4.2.0
