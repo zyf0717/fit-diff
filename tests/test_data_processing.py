@@ -40,11 +40,14 @@ class TestProcessFit:
                 },  # FIT epoch for ~2023-01-01 + 1s
             ],
             "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 152}],
+            "file_id_mesgs": [{"type": "activity", "manufacturer": "garmin"}],
         }
         mock_decoder.read.return_value = (mock_messages, [])
 
         # Test
-        session_df, record_df = process_file("test.fit")
+        data_dict = process_file("test.fit")
+        session_df = data_dict["session"]
+        record_df = data_dict["records"]
 
         # Verify
         assert isinstance(session_df, pd.DataFrame)
@@ -78,11 +81,13 @@ class TestProcessFit:
                 },
             ],
             "session_mesgs": [{"total_distance": 1000}],
+            "file_id_mesgs": [{"type": "activity", "manufacturer": "garmin"}],
         }
         mock_decoder.read.return_value = (mock_messages, [])
 
         # Test
-        session_df, record_df = process_file("test.fit")
+        data_dict = process_file("test.fit")
+        record_df = data_dict["records"]
 
         # Verify position conversion
         assert "position_lat" in record_df.columns
@@ -154,7 +159,9 @@ class TestProcessFit:
         mock_read_csv.return_value = mock_csv_data
 
         # Test
-        session_df, record_df = process_file("test.csv")
+        data_dict = process_file("test.csv")
+        session_df = data_dict["session"]
+        record_df = data_dict["records"]
 
         # Verify
         assert isinstance(session_df, pd.DataFrame)
@@ -207,7 +214,8 @@ class TestProcessFit:
         mock_read_csv.return_value = mock_csv_data
 
         # Test
-        session_df, record_df = process_file("test.csv")
+        data_dict = process_file("test.csv")
+        record_df = data_dict["records"]
 
         # Verify timestamps are converted to epoch timestamps
         # GMT+8 12:00 becomes UTC 04:00, which is 1672545600
@@ -333,12 +341,15 @@ class TestPrepareDataForAnalysis:
                 },  # UTC equivalent of CSV 12:02 GMT+8
             ],
             "session_mesgs": [{"total_distance": 1000, "avg_heart_rate": 150}],
+            "file_id_mesgs": [{"type": "activity", "manufacturer": "garmin"}],
         }
         mock_decoder.read.return_value = (mock_messages, [])
 
         # Process both files
-        csv_session, csv_record = process_file("test.csv")
-        fit_session, fit_record = process_file("test.fit")
+        csv_data_dict = process_file("test.csv")
+        csv_record = csv_data_dict["records"]
+        fit_data_dict = process_file("test.fit")
+        fit_record = fit_data_dict["records"]
 
         # Test prepare_data_for_analysis with mixed file types
         result = prepare_data_for_analysis((csv_record, fit_record), "heart_rate")
@@ -364,7 +375,9 @@ class TestPrepareDataForAnalysis:
 
         # Test with empty dataframes
         empty_df = pd.DataFrame()
-        assert prepare_data_for_analysis((empty_df, empty_df), "heart_rate") is None
+        result = prepare_data_for_analysis((empty_df, empty_df), "heart_rate")
+        assert isinstance(result, tuple) and len(result) == 2
+        assert result[0].empty and result[1].empty
 
 
 class TestRemoveOutliers:
@@ -435,7 +448,9 @@ class TestRemoveOutliers:
         assert len(result) <= len(
             df
         )  # Allow for the possibility that it might not be removed
-        # Just verify the function runs without error    def test_remove_outliers_percentile(self):
+        # Just verify the function runs without error
+
+    def test_remove_outliers_percentile(self):
         """Test percentile outlier removal."""
         df = self.create_test_data()
 

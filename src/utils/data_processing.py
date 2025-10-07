@@ -15,15 +15,36 @@ from .statistics import calculate_ccc
 
 logger = logging.getLogger(__name__)
 
+# Optional S3 support
+try:
+    import os
+    import tempfile
 
-def process_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    import boto3
+
+    S3_AVAILABLE = True
+except ImportError:
+    S3_AVAILABLE = False
+
+
+def process_file(file_path: str, aws_profile: str = None) -> dict:
     """
-    Read a FIT or CSV file and return:
-      - session_df: one‐row DataFrame of all session messages
-      - record_df: one‐row per 'record' message (timestamped samples)
+    Read a FIT or CSV file from local filesystem or S3 and return dictionary with:
+    - session_df: one‐row DataFrame of all session messages
+    - record_df: one‐row per 'record' message (timestamped samples)
+    - file_id_df: one‐row of file ID messages
+    - device_info_df: one‐row of device info messages
+
+    Args:
+        file_path: Local file path or S3 URL (s3://bucket/key)
+        aws_profile: AWS profile name for S3 access (optional)
     """
+    # Check if it's an S3 URL
+    if file_path.startswith("s3://"):
+        return _process_s3_file(file_path, aws_profile)
+
+    # Handle local file
     file_path = Path(file_path)
-
     if file_path.suffix.lower() == ".csv":
         return _process_csv(file_path)
     elif file_path.suffix.lower() == ".fit":
@@ -32,8 +53,8 @@ def process_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
         raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
 
-def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Process a FIT file."""
+def _read_fit_file(file_path: Path) -> dict:
+    """Read and decode a FIT file, returning raw messages."""
     stream = Stream.from_file(str(file_path))
     decoder = Decoder(stream)
     messages, _ = decoder.read(
@@ -46,11 +67,17 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         merge_heart_rates=True,
         mesg_listener=None,
     )
+    return messages
 
+
+def _process_fit_messages(messages: dict, filename: str) -> dict:
+    """Process FIT messages into session and record DataFrames."""
     ### Record data - one row per record message ###
     record_df = pd.json_normalize(messages.get("record_mesgs", []), sep="_")
     if record_df.empty:
         raise ValueError("No record messages found in FIT file")
+
+    # Convert GPS coordinates from semicircles to degrees
     if "position_lat" in record_df.columns and "position_long" in record_df.columns:
         record_df["position_lat"] = record_df["position_lat"] * (180 / 2**31)
         record_df["position_long"] = record_df["position_long"] * (180 / 2**31)
@@ -62,18 +89,38 @@ def _process_fit_file(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
         FIT_EPOCH_S = 631065600
         record_df["timestamp"] = record_df["timestamp"] + FIT_EPOCH_S
 
-    record_df["filename"] = str(file_path.name)
+    record_df["filename"] = filename
 
     ### Session data - one row per file ###
     session_df = pd.json_normalize(messages.get("session_mesgs", []), sep="_")
     if session_df.empty:
         raise ValueError("No session messages found in FIT file")
-    session_df["filename"] = str(file_path.name)
+    session_df["filename"] = filename
 
-    return session_df, record_df
+    ### Metadata - one row per file ###
+    file_id_df = pd.json_normalize(messages.get("file_id_mesgs", []), sep="_")
+    device_info_df = pd.json_normalize(messages.get("device_info_mesgs", []), sep="_")
+
+    if file_id_df.empty and device_info_df.empty:
+        raise ValueError("No file_id_mesgs or device_info_mesgs found in FIT file")
+    file_id_df["filename"] = filename
+    device_info_df["filename"] = filename
+
+    return {
+        "session": session_df,
+        "records": record_df,
+        "file_id": file_id_df,
+        "device_info": device_info_df,
+    }
 
 
-def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _process_fit_file(file_path: Path) -> dict:
+    """Process a FIT file by reading and then processing the messages."""
+    messages = _read_fit_file(file_path)
+    return _process_fit_messages(messages, str(file_path.name))
+
+
+def _process_csv(file_path: Path) -> dict:
     """Process a CSV file, converting it to the same format as FIT files."""
     try:
         df = pd.read_csv(file_path)
@@ -147,7 +194,127 @@ def _process_csv(file_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     session_df = pd.DataFrame([session_data])
 
-    return session_df, record_df
+    return {
+        "session": session_df,
+        "records": record_df,
+        "file_id": pd.DataFrame(),
+        "device_info": pd.DataFrame(),
+    }
+
+
+def _read_s3_fit_file(s3_url: str, aws_profile: str = None) -> dict:
+    """Read and decode a FIT file from S3, returning raw messages."""
+    if not S3_AVAILABLE:
+        raise ImportError(
+            "boto3 is required for S3 support. Install with: pip install boto3"
+        )
+
+    # Parse S3 URL
+    if not s3_url.startswith("s3://"):
+        raise ValueError("S3 URL must start with s3://")
+
+    url_parts = s3_url[5:].split("/", 1)  # Remove s3:// prefix
+    if len(url_parts) != 2:
+        raise ValueError("Invalid S3 URL format. Expected: s3://bucket/key")
+
+    bucket_name, key = url_parts
+
+    # Create S3 client with optional profile
+    session = (
+        boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
+    )
+    s3_client = session.client("s3")
+
+    # Download to temporary file for FIT processing (garmin_fit_sdk needs file path)
+    with tempfile.NamedTemporaryFile(suffix=".fit", delete=False) as tmp_file:
+        try:
+            logger.info(f"Downloading {s3_url} to temporary file...")
+            s3_client.download_file(bucket_name, key, tmp_file.name)
+
+            # Read FIT messages from temporary file
+            messages = _read_fit_file(Path(tmp_file.name))
+            return messages
+
+        except Exception as e:
+            logger.error(f"Error reading S3 FIT file {s3_url}: {e}")
+            raise
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(tmp_file.name)
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup temporary file: {cleanup_error}")
+
+
+def _process_s3_file(s3_url: str, aws_profile: str = None) -> dict:
+    """
+    Process a FIT or CSV file from S3.
+
+    Args:
+        s3_url: S3 URL in format s3://bucket/key
+        aws_profile: AWS profile name (optional)
+
+    Returns:
+        Dictionary with keys:
+          - 'session': session DataFrame
+          - 'records': record DataFrame
+          - 'file_id': file ID DataFrame
+          - 'device_info': device info DataFrame
+    """
+    if not S3_AVAILABLE:
+        raise ImportError(
+            "boto3 is required for S3 support. Install with: pip install boto3"
+        )
+
+    # Parse S3 URL to get key and determine file type
+    url_parts = s3_url[5:].split("/", 1)  # Remove s3:// prefix
+    if len(url_parts) != 2:
+        raise ValueError("Invalid S3 URL format. Expected: s3://bucket/key")
+
+    bucket_name, key = url_parts
+    file_extension = Path(key).suffix.lower()
+    original_filename = Path(key).name
+
+    if file_extension not in [".fit", ".csv"]:
+        raise ValueError(f"Unsupported file format: {file_extension}")
+
+    try:
+        if file_extension == ".fit":
+            # Process FIT file
+            messages = _read_s3_fit_file(s3_url, aws_profile)
+            df_dict = _process_fit_messages(messages, original_filename)
+        else:  # .csv
+            # For CSV files, still need to download to temp file as pandas needs file path
+            session = (
+                boto3.Session(profile_name=aws_profile)
+                if aws_profile
+                else boto3.Session()
+            )
+            s3_client = session.client("s3")
+
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
+                try:
+                    logger.info(f"Downloading {s3_url} to temporary file...")
+                    s3_client.download_file(bucket_name, key, tmp_file.name)
+                    df_dict = _process_csv(Path(tmp_file.name))
+
+                    # Update filename to use the original S3 key basename
+                    df_dict["session"]["filename"] = original_filename
+                    df_dict["records"]["filename"] = original_filename
+
+                finally:
+                    try:
+                        os.unlink(tmp_file.name)
+                    except Exception as cleanup_error:
+                        logger.warning(
+                            f"Failed to cleanup temporary file: {cleanup_error}"
+                        )
+
+        return df_dict
+
+    except Exception as e:
+        logger.error(f"Error processing S3 file {s3_url}: {e}")
+        raise
 
 
 def _get_required_columns(df: pd.DataFrame, metric: str) -> list:
@@ -221,6 +388,42 @@ def _prepare_comparison_dataframes(
     return test_data_df, ref_data_df
 
 
+def process_multiple_files(file_paths: list, aws_profile: str = None) -> list:
+    """
+    Process multiple files (local or S3) and return list of (session_df, record_df) tuples.
+
+    Args:
+        file_paths: List of file paths or S3 URLs
+        aws_profile: AWS profile name for S3 files (optional)
+
+    Returns:
+        Dictionary with keys:
+          - 'session': session DataFrame
+          - 'records': record DataFrame
+          - 'file_id': file ID DataFrame
+          - 'device_info': device info DataFrame
+        for each successfully processed file.
+    """
+    results = []
+    failed_files = []
+
+    for i, file_path in enumerate(file_paths, 1):
+        try:
+            logger.info(f"Processing file {i}/{len(file_paths)}: {file_path}")
+            df_dict = process_file(file_path, aws_profile)
+            results.append(df_dict)
+        except Exception as e:
+            logger.error(f"Failed to process {file_path}: {e}")
+            failed_files.append(file_path)
+            continue
+
+    if failed_files:
+        logger.warning(f"Failed to process {len(failed_files)} files: {failed_files}")
+
+    logger.info(f"Successfully processed {len(results)}/{len(file_paths)} files")
+    return results
+
+
 def prepare_data_for_analysis(
     all_fit_data: Union[tuple, pd.DataFrame], metric: str
 ) -> Union[Tuple[pd.DataFrame, pd.DataFrame], pd.DataFrame, None]:
@@ -248,6 +451,7 @@ def prepare_data_for_analysis(
         return None
 
     test_data_df, ref_data_df = all_fit_data
+
     return _prepare_comparison_dataframes(test_data_df, ref_data_df, metric)
 
 

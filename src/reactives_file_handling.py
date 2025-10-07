@@ -29,7 +29,7 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
             if file_info["name"] not in selected_files:
                 continue
             try:
-                _, record_df = process_file(file_info["datapath"])
+                record_df = process_file(file_info["datapath"])["records"]
                 device_data[file_info["name"]] = record_df
             except Exception as e:
                 logger.error(
