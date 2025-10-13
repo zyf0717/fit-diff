@@ -86,6 +86,7 @@ def process_file_list(file_list):
     df["tags"] = df["key"].apply(
         lambda x: [x.split("/")[1]] if len(x.split("/")) > 1 else []
     )
+    df["tags"] = df["tags"].apply("|".join)  # Store as string for CSV
     return df[["etag", "key", "size_mb", "device_type", "tags"]]
 
 

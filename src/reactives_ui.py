@@ -1,12 +1,10 @@
 """UI reactive functions for the FIT file comparison app."""
 
-import logging
-
 from faicons import icon_svg
 from shiny import Inputs, reactive, render, session, ui
 from shinywidgets import output_widget
 
-logger = logging.getLogger(__name__)
+from src.utils.data_processing import load_batch_tags
 
 
 def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: dict):
@@ -351,6 +349,22 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         else:
             await send()
 
+    @render.ui
+    def batchTagOptions():
+        """
+        Simple batch tag options - loads from S3 or uses defaults.
+
+        TODO: Update batch_tags.csv path in _load_batch_tags() function
+        """
+        tags = load_batch_tags()
+
+        return ui.input_checkbox_group(
+            "batchTagOptions",
+            "Select batch options:",
+            choices=tags,
+            selected=[],
+        )
+
     return {
         "mainContent": mainContent,
         "testFileSelector": testFileSelector,
@@ -358,4 +372,5 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         "comparisonMetricSelector": comparisonMetricSelector,
         "outlierRemovalSelector": outlierRemovalSelector,
         "shiftSecondsSelector": shiftSecondsSelector,
+        "batchTagOptions": batchTagOptions,
     }

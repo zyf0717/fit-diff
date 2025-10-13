@@ -9,6 +9,7 @@ from typing import Tuple, Union
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from garmin_fit_sdk import Decoder, Stream
 
 from .statistics import calculate_ccc
@@ -22,7 +23,10 @@ try:
 
     import boto3
 
+    load_dotenv(override=True)
+
     S3_AVAILABLE = True
+
 except ImportError:
     S3_AVAILABLE = False
 
@@ -828,3 +832,52 @@ def _determine_optimal_shift_single_pair(
                 best_shift = shift
 
     return best_shift
+
+
+def load_batch_tags():
+    """
+    Load batch tags from S3 CSV - simplified following catalogue_update.py pattern.
+
+    Uses same S3_BUCKET and AWS_PROFILE env vars as catalogue_update.py
+    """
+    default_tags = ["Test Tag 1", "Test Tag 2", "Test Tag 3"]
+
+    if not S3_AVAILABLE:
+        return default_tags
+
+    try:
+        bucket = os.getenv("S3_BUCKET")
+        aws_profile = os.getenv("AWS_PROFILE")
+        csv_key = os.getenv("CATALOGUE_CSV_KEY")
+
+        if not bucket:
+            logger.warning("S3_BUCKET not set, using default tags")
+            return default_tags
+
+        # S3 read (same pattern as catalogue_update.py)
+        session_obj = (
+            boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
+        )
+        s3_client = session_obj.client("s3")
+        response = s3_client.get_object(Bucket=bucket, Key=csv_key)
+        df = pd.read_csv(response["Body"])
+
+        if "tags" in df.columns:
+            tags = sorted(
+                {
+                    tag.strip()
+                    for cell in df["tags"].dropna().astype(str)
+                    for tag in cell.split("|")
+                    if tag.strip()
+                }
+            )
+        else:
+            logger.warning("No 'tags' column found")
+            return default_tags
+
+        logger.info("Loaded the following batch tags from S3: %s", tags)
+        return tags
+
+    except Exception as e:
+        logger.warning("Failed to load batch tags: %s", e)
+        return default_tags

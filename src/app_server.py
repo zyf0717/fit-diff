@@ -44,6 +44,8 @@ def server(inputs: Inputs, output: Outputs, session: Session):
     output.refFileSelector = ui_reactives["refFileSelector"]
     output.comparisonMetricSelector = ui_reactives["comparisonMetricSelector"]
     output.outlierRemovalSelector = ui_reactives["outlierRemovalSelector"]
+    output.shiftSecondsSelector = ui_reactives["shiftSecondsSelector"]
+    output.batchTagOptions = ui_reactives["batchTagOptions"]
 
     # Register visualization reactives
     output.metricPlot = visualization_reactives["metricPlot"]

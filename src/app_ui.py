@@ -2,6 +2,18 @@ import shinyswatch
 from shiny import ui
 
 app_ui = ui.page_fluid(
+    ui.tags.style(
+        """
+        /* Make the sidebar independently scrollable */
+        .sidebar {
+            max-height: 100vh;
+            overflow-y: auto;
+            position: sticky;
+            top: 0;
+            background: inherit;
+        }
+        """
+    ),
     ui.tags.script(
         """
         Shiny.addCustomMessageHandler("toggle_disabled", function(msg) {
@@ -30,7 +42,7 @@ app_ui = ui.page_fluid(
     ui.navset_bar(
         ui.nav_panel(
             "Benchmarking",
-            ui.layout_sidebar(
+            ui.page_sidebar(
                 ui.sidebar(
                     ui.tags.script(
                         """
@@ -59,18 +71,13 @@ app_ui = ui.page_fluid(
             ),
         ),
         ui.nav_panel(
-            "Batch Processing",
-            ui.layout_sidebar(
+            "Batch",
+            ui.page_sidebar(
                 ui.sidebar(
-                    ui.input_file(
-                        "batchFileUpload",
-                        "Upload batch file(s)",
-                        multiple=True,
-                        accept=[".fit", ".csv", ".FIT", ".CSV"],
-                    ),
+                    ui.output_ui("batchTagOptions"),
                 ),
+                ui.output_ui("batchContent"),
             ),
-            ui.output_ui("batchContent"),
         ),
         title="",
     ),
