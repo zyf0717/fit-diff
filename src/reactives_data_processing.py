@@ -253,8 +253,8 @@ def create_data_processing_reactives(
 
             # Handle both single shift (backward compatibility) and list of shifts
             if isinstance(seconds_to_shift, list):
-                # Multiple pairs - format as comma-separated list
-                optimal_shift_text = ",".join(str(s) for s in seconds_to_shift)
+                # Multiple pairs - format as comma-space separated list for better readability
+                optimal_shift_text = ", ".join(str(s) for s in seconds_to_shift)
             else:
                 # Single pair or None
                 optimal_shift = seconds_to_shift if seconds_to_shift is not None else 0
@@ -296,18 +296,11 @@ def create_data_processing_reactives(
 
             # Check if we have pair_index column (multiple pairs)
             if "pair_index" in test_data.columns:
-                # Parse comma-separated shifts
+                # Parse shifts with flexible format support
                 try:
-                    shift_values = [
-                        float(s.strip()) for s in str(shift_input).split(",")
-                    ]
+                    shift_values = _parse_shift_input_flexible(shift_input)
                 except (ValueError, AttributeError):
-                    # Fall back to single shift for all pairs
-                    try:
-                        single_shift = float(shift_input)
-                        shift_values = [single_shift]
-                    except (ValueError, TypeError):
-                        return test_data, ref_data
+                    return test_data, ref_data
 
                 # Apply shifts per pair
                 unique_pairs = sorted(test_data["pair_index"].dropna().unique())
@@ -497,6 +490,47 @@ def create_data_processing_reactives(
         except Exception as e:
             logger.error("Error in %s: %s", func_name, e, exc_info=True)
             return default_return
+
+    def _parse_shift_input_flexible(shift_input):
+        """
+        Parse shift input with flexible format support.
+
+        Supported formats:
+        - "5" -> [5.0]
+        - "5, 10, 0" -> [5.0, 10.0, 0.0]
+        - "5,10,0" -> [5.0, 10.0, 0.0]
+        - "5 10 0" -> [5.0, 10.0, 0.0]
+        - "[5, 10, 0]" -> [5.0, 10.0, 0.0]
+        """
+        if not shift_input or shift_input == "":
+            return []
+
+        shift_input = str(shift_input).strip()
+
+        # Remove brackets if present
+        if shift_input.startswith("[") and shift_input.endswith("]"):
+            shift_input = shift_input[1:-1].strip()
+
+        # Try different separators in order of preference
+        separators = [",", " ", ";"]
+
+        for sep in separators:
+            if sep in shift_input:
+                try:
+                    values = [
+                        float(s.strip()) for s in shift_input.split(sep) if s.strip()
+                    ]
+                    if values:  # Only return if we got valid values
+                        return values
+                except (ValueError, AttributeError):
+                    continue
+
+        # Single value fallback
+        try:
+            single_shift = float(shift_input)
+            return [single_shift]
+        except (ValueError, TypeError):
+            return []
 
     def _get_comparison_metric():
         """Get comparison metric with fallback to 'heart_rate'."""
