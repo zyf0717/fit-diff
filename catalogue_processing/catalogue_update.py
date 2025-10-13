@@ -128,7 +128,7 @@ async def main():
     # Sync to S3
     try:
         subprocess.run(
-            ["./catalogue_processing/sync_catalogue_to_s3.sh"],
+            ["./sync_catalogue_to_s3.sh"],
             check=True,
             capture_output=True,
             text=True,
