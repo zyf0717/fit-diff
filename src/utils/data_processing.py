@@ -379,8 +379,51 @@ def _prepare_comparison_dataframes(
     if not common_timestamps:
         return pd.DataFrame(), pd.DataFrame()
 
-    # Elapsed seconds based on first common timestamp per test-reference pair
-    for df in [test_data_df, ref_data_df]:
+    # Create file pairings based on overlapping timestamps
+    # Find which test and reference files have overlapping timestamps
+    test_file_timestamps = {}
+    ref_file_timestamps = {}
+
+    for filename in test_data_df["filename"].unique():
+        file_timestamps = set(
+            test_data_df[test_data_df["filename"] == filename]["timestamp"]
+        )
+        test_file_timestamps[filename] = file_timestamps
+
+    for filename in ref_data_df["filename"].unique():
+        file_timestamps = set(
+            ref_data_df[ref_data_df["filename"] == filename]["timestamp"]
+        )
+        ref_file_timestamps[filename] = file_timestamps
+
+    # Create pairs based on overlapping timestamps between test and ref files
+    file_pairs = []
+    pair_index = 0
+
+    for test_file, test_ts in test_file_timestamps.items():
+        for ref_file, ref_ts in ref_file_timestamps.items():
+            if test_ts.intersection(ref_ts):  # Files have overlapping timestamps
+                file_pairs.append((test_file, ref_file, pair_index))
+                pair_index += 1
+                break  # Assume one-to-one pairing; move to next test file
+
+    # Create mapping from filename to pair_index
+    test_file_to_pair = {}
+    ref_file_to_pair = {}
+
+    for test_file, ref_file, pair_idx in file_pairs:
+        test_file_to_pair[test_file] = pair_idx
+        ref_file_to_pair[ref_file] = pair_idx
+
+    # Add pair_index and elapsed_seconds to both dataframes
+    for df, file_to_pair in [
+        (test_data_df, test_file_to_pair),
+        (ref_data_df, ref_file_to_pair),
+    ]:
+        # Map filename to pair_index
+        df["pair_index"] = df["filename"].map(file_to_pair).astype("Int64")
+
+        # Elapsed seconds based on first common timestamp per file
         df["elapsed_seconds"] = df.groupby("filename")["timestamp"].transform(
             lambda x: x - x[x.isin(common_timestamps)].min()
         )
