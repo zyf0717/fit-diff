@@ -250,14 +250,22 @@ def create_data_processing_reactives(
             seconds_to_shift = determine_optimal_shift(
                 test_data, ref_data, metric, auto_shift_method
             )
-            optimal_shift = seconds_to_shift if seconds_to_shift is not None else 0
+
+            # Handle both single shift (backward compatibility) and list of shifts
+            if isinstance(seconds_to_shift, list):
+                # Multiple pairs - format as comma-separated list
+                optimal_shift_text = ",".join(str(s) for s in seconds_to_shift)
+            else:
+                # Single pair or None
+                optimal_shift = seconds_to_shift if seconds_to_shift is not None else 0
+                optimal_shift_text = str(optimal_shift)
 
             if hasattr(inputs, "shift_seconds"):
                 try:
-                    ui.update_numeric("shift_seconds", value=optimal_shift)
+                    ui.update_text("shift_seconds", value=optimal_shift_text)
                     logger.info(
                         "Auto-set shift_seconds to %s based on %s",
-                        optimal_shift,
+                        optimal_shift_text,
                         auto_shift_method,
                     )
                 except Exception as set_error:
@@ -267,13 +275,11 @@ def create_data_processing_reactives(
 
     @reactive.Calc
     def _get_shifted_data():
-        shift_seconds = _safe_get_input(
+        shift_input = _safe_get_input(
             lambda: (
-                int(inputs.shift_seconds() or 0)
-                if hasattr(inputs, "shift_seconds")
-                else 0
+                inputs.shift_seconds() if hasattr(inputs, "shift_seconds") else ""
             ),
-            default=0,
+            default="",
         )
 
         test_data, ref_data = _get_trimmed_data()
@@ -281,10 +287,56 @@ def create_data_processing_reactives(
             return pd.DataFrame(), pd.DataFrame()
 
         try:
-            if shift_seconds != 0:
-                test_data = test_data.copy()
-                test_data["elapsed_seconds"] += shift_seconds
-                test_data["timestamp"] = test_data["timestamp"] + shift_seconds
+            test_data = test_data.copy()
+
+            # Parse shift input - can be a single value or comma-separated list
+            if not shift_input or shift_input == "":
+                # No shift
+                return test_data, ref_data
+
+            # Check if we have pair_index column (multiple pairs)
+            if "pair_index" in test_data.columns:
+                # Parse comma-separated shifts
+                try:
+                    shift_values = [
+                        float(s.strip()) for s in str(shift_input).split(",")
+                    ]
+                except (ValueError, AttributeError):
+                    # Fall back to single shift for all pairs
+                    try:
+                        single_shift = float(shift_input)
+                        shift_values = [single_shift]
+                    except (ValueError, TypeError):
+                        return test_data, ref_data
+
+                # Apply shifts per pair
+                unique_pairs = sorted(test_data["pair_index"].dropna().unique())
+
+                for i, pair_idx in enumerate(unique_pairs):
+                    # Get the shift for this pair (use last available shift if not enough provided)
+                    shift_for_pair = (
+                        shift_values[min(i, len(shift_values) - 1)]
+                        if shift_values
+                        else 0
+                    )
+
+                    if shift_for_pair != 0:
+                        # Apply shift to rows belonging to this pair
+                        pair_mask = test_data["pair_index"] == pair_idx
+                        test_data.loc[pair_mask, "elapsed_seconds"] += shift_for_pair
+                        test_data.loc[pair_mask, "timestamp"] += shift_for_pair
+
+            else:
+                # Single pair (backward compatibility)
+                try:
+                    shift_seconds = float(shift_input)
+                except (ValueError, TypeError):
+                    shift_seconds = 0
+
+                if shift_seconds != 0:
+                    test_data["elapsed_seconds"] += shift_seconds
+                    test_data["timestamp"] += shift_seconds
+
             return test_data, ref_data
         except Exception as e:
             logger.error("Error in _get_shifted_data: %s", e, exc_info=True)

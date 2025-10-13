@@ -657,7 +657,14 @@ def get_raw_data_sample(
 
 
 def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
-    """Determine optimal time shift in seconds to align test data to reference data."""
+    """
+    Determine optimal time shift in seconds to align test data to reference data.
+
+    Returns:
+        - For data with pair_index column: list of shifts corresponding to each pair
+        - For data without pair_index column: single shift value (backward compatibility)
+        - None if no valid data
+    """
     if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
         return None
     if "None" in auto_shift_method:
@@ -668,6 +675,60 @@ def determine_optimal_shift(test_data, ref_data, metric, auto_shift_method):
         return 0
     if "timestamp" not in test_data.columns or "timestamp" not in ref_data.columns:
         return 0
+
+    # Check if we have pair_index column (multiple pairs)
+    if "pair_index" in test_data.columns and "pair_index" in ref_data.columns:
+        return _determine_optimal_shift_for_pairs(
+            test_data, ref_data, metric, auto_shift_method
+        )
+    else:
+        # Single pair (backward compatibility)
+        return _determine_optimal_shift_single_pair(
+            test_data, ref_data, metric, auto_shift_method
+        )
+
+
+def _determine_optimal_shift_for_pairs(test_data, ref_data, metric, auto_shift_method):
+    """Determine optimal shift for each pair in the data."""
+    # Get unique pair indices (excluding NaN)
+    test_pairs = test_data["pair_index"].dropna().unique()
+    ref_pairs = ref_data["pair_index"].dropna().unique()
+    common_pairs = sorted(set(test_pairs).intersection(set(ref_pairs)))
+
+    if not common_pairs:
+        return []
+
+    shifts = []
+
+    for pair_idx in common_pairs:
+        # Get data for this specific pair
+        test_pair_data = test_data[test_data["pair_index"] == pair_idx].copy()
+        ref_pair_data = ref_data[ref_data["pair_index"] == pair_idx].copy()
+
+        # Calculate shift for this pair
+        pair_shift = _determine_optimal_shift_single_pair(
+            test_pair_data, ref_pair_data, metric, auto_shift_method
+        )
+
+        shifts.append(pair_shift if pair_shift is not None else 0)
+
+        logger.info(
+            "Optimal shift for pair %s: %s seconds (%s)",
+            pair_idx,
+            shifts[-1],
+            auto_shift_method,
+        )
+
+    return shifts
+
+
+def _determine_optimal_shift_single_pair(
+    test_data, ref_data, metric, auto_shift_method
+):
+    """Determine optimal time shift for a single pair of test/reference data."""
+
+    if test_data is None or test_data.empty or ref_data is None or ref_data.empty:
+        return None
 
     # Set max shift to 300 seconds (5 minutes)
     max_shift_seconds = 300

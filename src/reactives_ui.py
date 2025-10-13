@@ -288,11 +288,11 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     @render.ui
     def shiftSecondsSelector():
-        return ui.input_numeric(
+        return ui.input_text(
             id="shift_seconds",
             label="Shift test data (seconds):",
-            value=0,
-            step=1,
+            value="",
+            placeholder="Enter seconds (e.g., 5 or 5,10,0 for multiple file pairs)",
             update_on="blur",
         )
 
