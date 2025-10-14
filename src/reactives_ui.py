@@ -11,7 +11,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
     """Create UI reactive functions."""
 
     @render.ui
-    def mainContent():
+    def benchmarkingContent():
         # Only render main content when at least one file from each type is uploaded
         test_files = inputs.testFileUpload()
         ref_files = inputs.refFileUpload()
@@ -353,8 +353,6 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
     def batchTagOptions():
         """
         Simple batch tag options - loads from S3 or uses defaults.
-
-        TODO: Update batch_tags.csv path in _load_batch_tags() function
         """
         tags = load_batch_tags()
 
@@ -365,12 +363,17 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             selected=[],
         )
 
+    @render.ui
+    def batchContent():
+        return None
+
     return {
-        "mainContent": mainContent,
+        "benchmarkingContent": benchmarkingContent,
         "testFileSelector": testFileSelector,
         "refFileSelector": refFileSelector,
         "comparisonMetricSelector": comparisonMetricSelector,
         "outlierRemovalSelector": outlierRemovalSelector,
         "shiftSecondsSelector": shiftSecondsSelector,
         "batchTagOptions": batchTagOptions,
+        "batchContent": batchContent,
     }

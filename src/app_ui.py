@@ -67,7 +67,7 @@ app_ui = ui.page_fluid(
                     ui.hr(),
                     ui.input_action_button("logout", "Logout"),
                 ),
-                ui.output_ui("mainContent"),
+                ui.output_ui("benchmarkingContent"),
             ),
         ),
         ui.nav_panel(

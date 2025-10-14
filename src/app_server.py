@@ -39,7 +39,7 @@ def server(inputs: Inputs, output: Outputs, session: Session):
         await session.send_custom_message("logout", {})
 
     # Register UI reactives
-    output.mainContent = ui_reactives["mainContent"]
+    output.benchmarkingContent = ui_reactives["benchmarkingContent"]
     output.testFileSelector = ui_reactives["testFileSelector"]
     output.refFileSelector = ui_reactives["refFileSelector"]
     output.comparisonMetricSelector = ui_reactives["comparisonMetricSelector"]
