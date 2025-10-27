@@ -4,8 +4,6 @@ from faicons import icon_svg
 from shiny import Inputs, reactive, render, session, ui
 from shinywidgets import output_widget
 
-from src.utils.data_processing import load_batch_tags
-
 
 def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: dict):
     """Create UI reactive functions."""
@@ -354,18 +352,26 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         """
         Simple batch tag options - loads from S3 or uses defaults.
         """
-        tags = load_batch_tags()
+        catalogue_df = file_reactives["_get_catalogue"]()
+        if catalogue_df is None or "tags" not in catalogue_df.columns:
+            tags = ["Test Tag 1", "Test Tag 2", "Test Tag 3"]
+        else:
+            tags = sorted(catalogue_df["tags"].dropna().unique().tolist())
 
         return ui.input_checkbox_group(
-            "batchTagOptions",
+            "selectedBatchTags",
             "Select batch options:",
             choices=tags,
-            selected=[],
+            selected=tags[0],
         )
 
     @render.ui
     def batchContent():
-        return None
+        if not inputs.selectedBatchTags():
+            return None
+        return ui.div(
+            ui.layout_columns(ui.output_data_frame("catalogueTable"), col_widths=[12]),
+        )
 
     return {
         "benchmarkingContent": benchmarkingContent,

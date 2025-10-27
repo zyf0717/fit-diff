@@ -8,6 +8,7 @@ from shiny import Inputs, Session, reactive
 from shiny.types import FileInfo, SilentException
 
 from src.utils import process_file
+from src.utils.data_processing import read_catalogue
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +120,48 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
             common_metrics.remove("filename")
         return sorted(list(common_metrics))
 
+    @reactive.Calc
+    def _get_catalogue():
+        df = read_catalogue()
+        if df is None or df.empty:
+            logger.warning("Catalogue DataFrame is empty or None")
+            return pd.DataFrame()
+
+        return df
+
+    @reactive.Calc
+    def _read_batch_files():
+        selected_tags = (
+            inputs.selectedBatchTags() if hasattr(inputs, "selectedBatchTags") else []
+        )
+        logger.info("Selected batch tags: %s", selected_tags)
+        if not selected_tags:
+            return None
+
+        catalogue_df = _get_catalogue()
+        if catalogue_df is None or catalogue_df.empty:
+            logger.warning("_read_batch_files: catalogue_df is empty or None")
+            return None
+
+        # Filter catalogue by selected tags
+        filtered_catalogue = catalogue_df[
+            catalogue_df["tags"].isin(selected_tags)
+        ].reset_index(drop=True)
+
+        if filtered_catalogue.empty:
+            logger.warning(
+                "_read_batch_files: No files found for selected tags: %s",
+                selected_tags,
+            )
+            return None
+
+        return filtered_catalogue
+
     return {
         "_process_test_device_files": _process_test_device_files,
         "_process_reference_device_files": _process_reference_device_files,
         "_all_fit_data": _all_fit_data,
         "_get_common_metrics": _get_common_metrics,
+        "_get_catalogue": _get_catalogue,
+        "_read_batch_files": _read_batch_files,
     }

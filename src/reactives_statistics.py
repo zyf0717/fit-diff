@@ -146,6 +146,13 @@ def create_statistics_reactives(
 
         return get_raw_data_sample(test_data, ref_data, sample_size, selected_filenames)
 
+    @render.data_frame
+    def catalogueTable():
+        catalogue_df = file_reactives["_read_batch_files"]()
+        if catalogue_df is None or catalogue_df.empty:
+            return pd.DataFrame()
+        return render.DataGrid(catalogue_df, selection_mode="rows")
+
     return {
         "_get_stats": _get_stats,
         "_get_bias_stats": _get_bias_stats,
@@ -158,4 +165,5 @@ def create_statistics_reactives(
         "llm_summary_effect": llm_summary_effect,
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,
+        "catalogueTable": catalogueTable,
     }

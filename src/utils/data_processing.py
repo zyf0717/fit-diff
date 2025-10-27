@@ -834,11 +834,10 @@ def _determine_optimal_shift_single_pair(
     return best_shift
 
 
-def load_batch_tags():
+def read_catalogue():
     """
-    Load batch tags from S3 CSV - simplified following catalogue_update.py pattern.
-
-    Uses same S3_BUCKET and AWS_PROFILE env vars as catalogue_update.py
+    Read the catalogue CSV from S3 and return as DataFrame.
+    If S3 is not available or reading fails, return default tags.
     """
     default_tags = ["Test Tag 1", "Test Tag 2", "Test Tag 3"]
 
@@ -851,8 +850,11 @@ def load_batch_tags():
         csv_key = os.getenv("CATALOGUE_CSV_KEY")
 
         if not bucket:
-            logger.warning("S3_BUCKET not set, using default tags")
-            return default_tags
+            logger.warning("S3_BUCKET not set")
+            return pd.DataFrame()
+        elif not csv_key:
+            logger.warning("CATALOGUE_CSV_KEY not set")
+            return pd.DataFrame()
 
         # S3 read (same pattern as catalogue_update.py)
         session_obj = (
@@ -861,23 +863,8 @@ def load_batch_tags():
         s3_client = session_obj.client("s3")
         response = s3_client.get_object(Bucket=bucket, Key=csv_key)
         df = pd.read_csv(response["Body"])
-
-        if "tags" in df.columns:
-            tags = sorted(
-                {
-                    tag.strip()
-                    for cell in df["tags"].dropna().astype(str)
-                    for tag in cell.split("|")
-                    if tag.strip()
-                }
-            )
-        else:
-            logger.warning("No 'tags' column found")
-            return default_tags
-
-        logger.info("Loaded the following batch tags from S3: %s", tags)
-        return tags
+        return df
 
     except Exception as e:
-        logger.warning("Failed to load batch tags: %s", e)
-        return default_tags
+        logger.warning("Failed to read catalogue from S3: %s", e)
+        return pd.DataFrame()
