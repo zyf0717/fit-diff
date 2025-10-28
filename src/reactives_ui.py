@@ -288,7 +288,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             id="shift_seconds",
             label="Shift test data (seconds):",
             value="",
-            placeholder="Enter seconds (e.g., 5 or 5, 10, 0 or [5, 10, 0] for multiple pairs)",
+            placeholder="Enter seconds",
             update_on="blur",
         )
 
