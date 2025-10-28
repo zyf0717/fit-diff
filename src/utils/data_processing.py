@@ -444,7 +444,7 @@ def process_multiple_files(file_paths: list, aws_profile: str = None) -> list:
         aws_profile: AWS profile name for S3 files (optional)
 
     Returns:
-        Dictionary with keys:
+        A list, containing dictionaries with the following keys:
           - 'session': session DataFrame
           - 'records': record DataFrame
           - 'file_id': file ID DataFrame

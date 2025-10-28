@@ -1,14 +1,19 @@
 """File handling reactive functions for the FIT file comparison app."""
 
 import logging
+import os
 from typing import List
 
 import pandas as pd
+from dotenv import load_dotenv
 from shiny import Inputs, Session, reactive
 from shiny.types import FileInfo, SilentException
 
-from src.utils import process_file
-from src.utils.data_processing import read_catalogue
+from src.utils.data_processing import process_multiple_files, read_catalogue
+
+load_dotenv(override=True)
+
+S3_BUCKET = os.getenv("S3_BUCKET")
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +160,13 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
             )
             return None
 
-        return filtered_catalogue
+        # Read and process files in the filtered catalogue
+        file_paths = [
+            "s3://" + S3_BUCKET + "/" + key for key in filtered_catalogue["key"]
+        ]
+        s3_data = process_multiple_files(file_paths)
+
+        return s3_data
 
     return {
         "_process_test_device_files": _process_test_device_files,

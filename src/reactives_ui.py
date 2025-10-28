@@ -370,7 +370,11 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         if not inputs.selectedBatchTags():
             return None
         return ui.div(
-            ui.layout_columns(ui.output_data_frame("catalogueTable"), col_widths=[12]),
+            ui.layout_columns(
+                ui.output_data_frame("catalogueTable"),
+                ui.output_data_frame("sessionTable"),
+                col_widths=[12, 12],
+            ),
         )
 
     return {

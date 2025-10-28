@@ -148,10 +148,24 @@ def create_statistics_reactives(
 
     @render.data_frame
     def catalogueTable():
-        catalogue_df = file_reactives["_read_batch_files"]()
+        catalogue_df = file_reactives["_get_catalogue"]().copy()
+        catalogue_df = catalogue_df[
+            catalogue_df["key"].isin(inputs.selectedBatchTags())
+        ]
         if catalogue_df is None or catalogue_df.empty:
             return pd.DataFrame()
-        return render.DataGrid(catalogue_df, selection_mode="rows")
+        return render.DataGrid(catalogue_df)
+
+    @render.data_frame
+    def sessionTable():
+        s3_data = file_reactives["_read_batch_files"]()
+        if s3_data is None or len(s3_data) == 0:
+            return pd.DataFrame()
+
+        session_data = pd.concat(
+            [item["session"] for item in s3_data], ignore_index=True
+        )
+        return render.DataGrid(session_data)
 
     return {
         "_get_stats": _get_stats,
@@ -166,4 +180,5 @@ def create_statistics_reactives(
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,
         "catalogueTable": catalogueTable,
+        "sessionTable": sessionTable,
     }
