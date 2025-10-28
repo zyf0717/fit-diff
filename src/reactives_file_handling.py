@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from shiny import Inputs, Session, reactive
 from shiny.types import FileInfo, SilentException
 
-from src.utils.data_processing import process_multiple_files, read_catalogue
+from src.utils import process_file, process_multiple_files, read_catalogue
 
 load_dotenv(override=True)
 

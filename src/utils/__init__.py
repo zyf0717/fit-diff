@@ -12,6 +12,8 @@ from .data_processing import (
     get_raw_data_sample,
     prepare_data_for_analysis,
     process_file,
+    process_multiple_files,
+    read_catalogue,
     remove_outliers,
 )
 
@@ -39,10 +41,12 @@ __all__ = [
     # Data processing
     "determine_optimal_shift",
     "process_file",
+    "process_multiple_files",
     "prepare_data_for_analysis",
     "remove_outliers",
     "get_file_information",
     "get_raw_data_sample",
+    "read_catalogue",
     # Statistics
     "calculate_basic_stats",
     "calculate_ccc",

@@ -150,7 +150,7 @@ def create_statistics_reactives(
     def catalogueTable():
         catalogue_df = file_reactives["_get_catalogue"]().copy()
         catalogue_df = catalogue_df[
-            catalogue_df["key"].isin(inputs.selectedBatchTags())
+            catalogue_df["tags"].isin(inputs.selectedBatchTags())
         ]
         if catalogue_df is None or catalogue_df.empty:
             return pd.DataFrame()

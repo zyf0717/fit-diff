@@ -37,25 +37,3 @@ def server(inputs: Inputs, output: Outputs, session: Session):
     @reactive.event(inputs.logout)
     async def _():
         await session.send_custom_message("logout", {})
-
-    # Register UI reactives
-    output.benchmarkingContent = ui_reactives["benchmarkingContent"]
-    output.testFileSelector = ui_reactives["testFileSelector"]
-    output.refFileSelector = ui_reactives["refFileSelector"]
-    output.comparisonMetricSelector = ui_reactives["comparisonMetricSelector"]
-    output.outlierRemovalSelector = ui_reactives["outlierRemovalSelector"]
-    output.shiftSecondsSelector = ui_reactives["shiftSecondsSelector"]
-    output.batchTagOptions = ui_reactives["batchTagOptions"]
-
-    # Register visualization reactives
-    output.metricPlot = visualization_reactives["metricPlot"]
-    output.errorHistogramPlot = visualization_reactives["errorHistogramPlot"]
-    output.blandAltmanPlot = visualization_reactives["blandAltmanPlot"]
-    output.rollingErrorPlot = visualization_reactives["rollingErrorPlot"]
-
-    # Register statistics reactives
-    output.basicStatsTable = statistics_reactives["basicStatsTable"]
-    output.biasTable = statistics_reactives["biasTable"]
-    output.accuracyTable = statistics_reactives["accuracyTable"]
-    output.agreementTable = statistics_reactives["agreementTable"]
-    output.rawDataTable = statistics_reactives["rawDataTable"]
