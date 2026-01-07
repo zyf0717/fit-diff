@@ -74,7 +74,6 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     step=1,
                     update_on="blur",
                 ),
-                ui.output_ui("shiftSecondsSelector"),
                 ui.input_select(
                     "auto_shift_method",
                     "Auto-shift by:",
@@ -87,6 +86,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ],
                     selected="None (manual)",
                 ),
+                ui.output_ui("shiftSecondsText"),
                 col_widths=[3, 3, 3, 3],
             ),
             ui.hr(),
@@ -283,7 +283,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         )
 
     @render.ui
-    def shiftSecondsSelector():
+    def shiftSecondsText():
         return ui.input_text(
             id="shift_seconds",
             label="Shift test data (seconds):",
@@ -383,7 +383,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         "refFileSelector": refFileSelector,
         "comparisonMetricSelector": comparisonMetricSelector,
         "outlierRemovalSelector": outlierRemovalSelector,
-        "shiftSecondsSelector": shiftSecondsSelector,
+        "shiftSecondsText": shiftSecondsText,
         "batchTagOptions": batchTagOptions,
         "batchContent": batchContent,
     }
