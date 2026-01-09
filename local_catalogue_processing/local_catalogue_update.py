@@ -43,8 +43,6 @@ def load_config():
     return data or {}
 
 
-
-
 def _normalize_tag_map(raw_map):
     if isinstance(raw_map, dict):
         return raw_map
@@ -238,6 +236,53 @@ def _extract_iso_date(filename, date_pattern):
 #     )
 
 
+def _extract_fit_date(file_path):
+    logger.info("Reading FIT file for date: %s", os.path.basename(str(file_path)))
+    try:
+        stream = Stream.from_file(str(file_path))
+        decoder = Decoder(stream)
+        messages, _ = decoder.read(
+            apply_scale_and_offset=True,
+            convert_datetimes_to_dates=False,
+            convert_types_to_strings=True,
+            enable_crc_check=True,
+            expand_sub_fields=True,
+            expand_components=True,
+            merge_heart_rates=True,
+            mesg_listener=None,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Error reading FIT file %s: %s", os.path.basename(str(file_path)), exc
+        )
+        return None
+
+    timestamps = [
+        msg.get("timestamp")
+        for msg in messages.get("record_mesgs", [])
+        if msg.get("timestamp") is not None
+    ]
+    if timestamps:
+        fit_start = min(timestamps)
+    else:
+        session_mesgs = messages.get("session_mesgs", [])
+        starts = [
+            msg.get("start_time")
+            for msg in session_mesgs
+            if msg.get("start_time") is not None
+        ]
+        fit_start = min(starts) if starts else None
+
+    if fit_start is None:
+        return None
+
+    fit_epoch_offset = 631065600
+    gmt8 = timezone(timedelta(hours=8))
+    return (
+        datetime.fromtimestamp(fit_start + fit_epoch_offset, tz=gmt8).date().isoformat()
+    )
+
+
 def _match_map_tags(values, tag_map):
     matched = []
     seen = set()
@@ -284,6 +329,20 @@ def _merge_tag_lists(*tag_lists):
                 merged.append(tag)
                 seen.add(tag)
     return merged
+
+
+def _extract_participant_id(file_path, base_dir):
+    if base_dir:
+        rel_path = os.path.relpath(file_path, base_dir)
+    else:
+        rel_path = str(file_path)
+    parts = list(Path(rel_path).parts)
+    if len(parts) < 3:
+        return None
+    candidate = parts[2].strip()
+    if re.fullmatch(r"[A-Z]{0,2}\d{2,3}", candidate):
+        return candidate.lower()
+    return None
 
 
 # def _parse_datetime_series(values, formats):
@@ -379,16 +438,20 @@ def _build_file_row(path, base_dir, date_pattern):
     filename = os.path.basename(path)
     level_tags = build_level_tags(path, base_dir)
     filename_value = os.path.splitext(os.path.basename(str(path)))[0].lower()
-    filename_tags = _match_map_tags(
-        [filename_value], FILENAME_TAG_KEYWORDS_MAP
-    )
+    filename_tags = _match_map_tags([filename_value], FILENAME_TAG_KEYWORDS_MAP)
     tags = _merge_tag_lists(level_tags, filename_tags)
+    participant_id = _extract_participant_id(path, base_dir)
+    if participant_id and participant_id not in tags:
+        tags.append(participant_id)
     if "h10" not in tags and "eq02" not in tags and "pacer" not in tags:
         tags.append("pacer")
+    date_value = _extract_iso_date(filename, date_pattern)
+    if date_value is None and filename.lower().endswith(".fit"):
+        date_value = _extract_fit_date(path)
     row = {
         "filename": filename,
         "relative_path": os.path.relpath(path, base_dir),
-        "date": _extract_iso_date(filename, date_pattern),
+        "date": date_value,
         "tags": "|".join(tags) if tags else None,
     }
     return row
