@@ -1,0 +1,31 @@
+l1_tag_keywords_map:
+  WH: weehon
+  NEXGEN: nexgen
+  Yifei: yifei
+
+l2_tag_keywords_map:
+  arcticcore: arcticcore
+  crown: crown
+  pilot: pilot
+  pilots: pilot
+  trial: trial
+  vo2max: vo2max
+  HIIT: hiit
+  treadmill: treadmill
+
+l4_tag_keywords_map:
+  hh: hh
+  wh: wh
+  AC: ac
+  CONTROL: control
+  CP: cp
+  CWI: cwi
+  FI: fi
+  IS: is
+  FAM: fam
+
+filename_tag_keywords_map:
+  h10: h10
+  pacer: pacer
+  eqlifemonitor: eq02
+  eq02: eq02
