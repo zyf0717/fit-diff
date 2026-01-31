@@ -118,7 +118,7 @@ def create_visualization_reactives(
 
             # Get rolling window size from input
             window_size = data_reactives["_safe_get_input"](
-                lambda: inputs.rolling_window_size(), default=50
+                inputs.rolling_window_size, default=60
             )
 
             return create_rolling_error_plot(

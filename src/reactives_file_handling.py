@@ -135,6 +135,7 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
         return df
 
     @reactive.Calc
+    @reactive.event(inputs.loadBatchData)
     def _read_batch_files():
         selected_tags = (
             inputs.selectedBatchTags() if hasattr(inputs, "selectedBatchTags") else []

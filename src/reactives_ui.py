@@ -201,7 +201,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     "Rolling window size (data points)",
                     min=10,
                     max=200,
-                    value=50,
+                    value=60,
                     step=10,
                 ),
                 output_widget("rollingErrorPlot"),

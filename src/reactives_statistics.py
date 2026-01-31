@@ -149,9 +149,12 @@ def create_statistics_reactives(
     @render.data_frame
     def catalogueTable():
         catalogue_df = file_reactives["_get_catalogue"]().copy()
-        catalogue_df = catalogue_df[
-            catalogue_df["tags"].isin(inputs.selectedBatchTags())
-        ]
+        selected_tags = (
+            inputs.selectedBatchTags() if hasattr(inputs, "selectedBatchTags") else []
+        )
+        if not selected_tags:
+            return pd.DataFrame()
+        catalogue_df = catalogue_df[catalogue_df["tags"].isin(selected_tags)]
         if catalogue_df is None or catalogue_df.empty:
             return pd.DataFrame()
         return render.DataGrid(catalogue_df)

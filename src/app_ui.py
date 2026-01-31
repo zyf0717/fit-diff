@@ -75,6 +75,7 @@ app_ui = ui.page_fluid(
             ui.page_sidebar(
                 ui.sidebar(
                     ui.output_ui("batchTagOptions"),
+                    ui.input_action_button("loadBatchData", "Load"),
                 ),
                 ui.output_ui("batchContent"),
             ),
