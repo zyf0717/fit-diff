@@ -340,7 +340,7 @@ def _extract_participant_id(file_path, base_dir):
     if len(parts) < 3:
         return None
     candidate = parts[2].strip()
-    if re.fullmatch(r"[A-Z]{0,2}\d{2,3}", candidate):
+    if re.fullmatch(r"[a-zA-Z]{0,3}\d{2,3}", candidate):
         return candidate.lower()
     return None
 
