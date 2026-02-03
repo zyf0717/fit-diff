@@ -349,6 +349,10 @@ def _prepare_single_dataframe(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     # Ensure filename is string type
     data_df["filename"] = data_df["filename"].astype(str)
 
+    # Remove rows where HR = 0 if metric is heart_rate
+    if metric == "heart_rate":
+        data_df = data_df[data_df["heart_rate"] != 0].reset_index(drop=True)
+
     # Add elapsed seconds based on first timestamp per file
     data_df["elapsed_seconds"] = data_df.groupby("filename")["timestamp"].transform(
         lambda x: x - x.min()
@@ -374,6 +378,13 @@ def _prepare_comparison_dataframes(
     # Ensure filename is string type
     test_data_df["filename"] = test_data_df["filename"].astype(str)
     ref_data_df["filename"] = ref_data_df["filename"].astype(str)
+
+    # Remove rows where HR = 0 if metric is heart_rate
+    if metric == "heart_rate":
+        test_data_df = test_data_df[test_data_df["heart_rate"] != 0].reset_index(
+            drop=True
+        )
+        ref_data_df = ref_data_df[ref_data_df["heart_rate"] != 0].reset_index(drop=True)
 
     # Find common timestamps between test and reference data
     test_timestamps = set(test_data_df["timestamp"])
