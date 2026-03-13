@@ -220,3 +220,6 @@ cron.sh
 
 # catalogue files
 *catalogue.csv
+
+# .vscode
+.vscode/
