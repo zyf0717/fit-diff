@@ -347,36 +347,6 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         else:
             await send()
 
-    @render.ui
-    def batchTagOptions():
-        """
-        Simple batch tag options - loads from S3 or uses defaults.
-        """
-        catalogue_df = file_reactives["_get_catalogue"]()
-        if catalogue_df is None or "tags" not in catalogue_df.columns:
-            tags = ["Test Tag 1", "Test Tag 2", "Test Tag 3"]
-        else:
-            tags = sorted(catalogue_df["tags"].dropna().unique().tolist())
-
-        return ui.input_checkbox_group(
-            "selectedBatchTags",
-            "Select batch options:",
-            choices=tags,
-            selected=tags[0],
-        )
-
-    @render.ui
-    def batchContent():
-        if not inputs.selectedBatchTags():
-            return None
-        return ui.div(
-            ui.layout_columns(
-                ui.output_data_frame("catalogueTable"),
-                ui.output_data_frame("sessionTable"),
-                col_widths=[12, 12],
-            ),
-        )
-
     return {
         "benchmarkingContent": benchmarkingContent,
         "testFileSelector": testFileSelector,
@@ -384,6 +354,4 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         "comparisonMetricSelector": comparisonMetricSelector,
         "outlierRemovalSelector": outlierRemovalSelector,
         "shiftSecondsText": shiftSecondsText,
-        "batchTagOptions": batchTagOptions,
-        "batchContent": batchContent,
     }

@@ -146,30 +146,6 @@ def create_statistics_reactives(
 
         return get_raw_data_sample(test_data, ref_data, sample_size, selected_filenames)
 
-    @render.data_frame
-    def catalogueTable():
-        catalogue_df = file_reactives["_get_catalogue"]().copy()
-        selected_tags = (
-            inputs.selectedBatchTags() if hasattr(inputs, "selectedBatchTags") else []
-        )
-        if not selected_tags:
-            return pd.DataFrame()
-        catalogue_df = catalogue_df[catalogue_df["tags"].isin(selected_tags)]
-        if catalogue_df is None or catalogue_df.empty:
-            return pd.DataFrame()
-        return render.DataGrid(catalogue_df)
-
-    @render.data_frame
-    def sessionTable():
-        s3_data = file_reactives["_read_batch_files"]()
-        if s3_data is None or len(s3_data) == 0:
-            return pd.DataFrame()
-
-        session_data = pd.concat(
-            [item["session"] for item in s3_data], ignore_index=True
-        )
-        return render.DataGrid(session_data)
-
     return {
         "_get_stats": _get_stats,
         "_get_bias_stats": _get_bias_stats,
@@ -182,6 +158,4 @@ def create_statistics_reactives(
         "llm_summary_effect": llm_summary_effect,
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,
-        "catalogueTable": catalogueTable,
-        "sessionTable": sessionTable,
     }

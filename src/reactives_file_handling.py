@@ -1,19 +1,13 @@
 """File handling reactive functions for the FIT file comparison app."""
 
 import logging
-import os
 from typing import List
 
 import pandas as pd
-from dotenv import load_dotenv
 from shiny import Inputs, Session, reactive
 from shiny.types import FileInfo, SilentException
 
-from src.utils import process_file, process_multiple_files, read_catalogue
-
-load_dotenv(override=True)
-
-S3_BUCKET = os.getenv("S3_BUCKET")
+from src.utils import process_file
 
 logger = logging.getLogger(__name__)
 
@@ -125,55 +119,9 @@ def create_file_handling_reactives(inputs: Inputs, session: Session):
             common_metrics.remove("filename")
         return sorted(list(common_metrics))
 
-    @reactive.Calc
-    def _get_catalogue():
-        df = read_catalogue()
-        if df is None or df.empty:
-            logger.warning("Catalogue DataFrame is empty or None")
-            return pd.DataFrame()
-
-        return df
-
-    @reactive.Calc
-    @reactive.event(inputs.loadBatchData)
-    def _read_batch_files():
-        selected_tags = (
-            inputs.selectedBatchTags() if hasattr(inputs, "selectedBatchTags") else []
-        )
-        logger.info("Selected batch tags: %s", selected_tags)
-        if not selected_tags:
-            return None
-
-        catalogue_df = _get_catalogue()
-        if catalogue_df is None or catalogue_df.empty:
-            logger.warning("_read_batch_files: catalogue_df is empty or None")
-            return None
-
-        # Filter catalogue by selected tags
-        filtered_catalogue = catalogue_df[
-            catalogue_df["tags"].isin(selected_tags)
-        ].reset_index(drop=True)
-
-        if filtered_catalogue.empty:
-            logger.warning(
-                "_read_batch_files: No files found for selected tags: %s",
-                selected_tags,
-            )
-            return None
-
-        # Read and process files in the filtered catalogue
-        file_paths = [
-            "s3://" + S3_BUCKET + "/" + key for key in filtered_catalogue["key"]
-        ]
-        s3_data = process_multiple_files(file_paths)
-
-        return s3_data
-
     return {
         "_process_test_device_files": _process_test_device_files,
         "_process_reference_device_files": _process_reference_device_files,
         "_all_fit_data": _all_fit_data,
         "_get_common_metrics": _get_common_metrics,
-        "_get_catalogue": _get_catalogue,
-        "_read_batch_files": _read_batch_files,
     }
