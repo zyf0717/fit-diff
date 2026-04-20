@@ -219,7 +219,8 @@ cron.sh
 .DS_Store
 
 # catalogue files
-*catalogue.csv
+local_files_catalogue*.csv
+data_files_manifest*.csv
 
 # .vscode
 .vscode/
