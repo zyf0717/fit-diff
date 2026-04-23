@@ -12,6 +12,10 @@ from shiny.types import SilentException
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
+    get_cached_cloud_pair_summary,
+    get_cloud_cache_db_path,
+    init_cloud_cache,
+    put_cached_cloud_pair_summary,
     calculate_ccc,
     determine_optimal_shift,
     prepare_data_for_analysis,
@@ -312,6 +316,93 @@ def compute_pair_summary(aligned_df: pd.DataFrame, metric: str) -> dict:
     }
 
 
+def load_cloud_pair_data(
+    pair_df: pd.DataFrame,
+    selected_pair_ids: list[str],
+    bucket_name: str | None,
+    aws_profile: str | None,
+) -> dict:
+    """Load selected cloud pair data from S3 for uncached computations."""
+    if (
+        not isinstance(pair_df, pd.DataFrame)
+        or pair_df.empty
+        or not selected_pair_ids
+        or not bucket_name
+    ):
+        return {}
+
+    selected_pairs = pair_df[pair_df["pair_id"].isin(selected_pair_ids)]
+    pair_data = {}
+    for row in selected_pairs.itertuples(index=False):
+        try:
+            test_url = f"s3://{bucket_name}/{row.test_s3_key}"
+            ref_url = f"s3://{bucket_name}/{row.ref_s3_key}"
+            test_df = process_file(test_url, aws_profile=aws_profile)["records"].copy()
+            ref_df = process_file(ref_url, aws_profile=aws_profile)["records"].copy()
+            test_df["filename"] = row.test_filename
+            ref_df["filename"] = row.ref_filename
+
+            common_metrics = sorted(
+                set(test_df.columns).intersection(ref_df.columns)
+                - {"timestamp", "filename"}
+            )
+            pair_data[row.pair_id] = {
+                "meta": row._asdict(),
+                "test_df": test_df,
+                "ref_df": ref_df,
+                "common_metrics": common_metrics,
+            }
+        except Exception as exc:
+            logger.error("Error processing cloud pair %s: %s", row.pair_id, exc)
+            pair_data[row.pair_id] = {
+                "meta": row._asdict(),
+                "error": str(exc),
+                "common_metrics": [],
+            }
+    return pair_data
+
+
+def build_cloud_pair_result_row(
+    pair_id: str,
+    entry: dict,
+    metric: str,
+    auto_shift_method: str,
+) -> dict:
+    """Build one per-pair result row for the cloud summary and plots."""
+    meta = entry["meta"]
+    base_row = {
+        "pair_id": pair_id,
+        "Group": meta["pairing_group"],
+        "Date": meta["date"],
+        "Test File": meta["test_filename"],
+        "Ref File": meta["ref_filename"],
+        "Metric": metric,
+        "Auto-shift": auto_shift_method,
+    }
+
+    if entry.get("error"):
+        return {**base_row, "Status": f"Error: {entry['error']}"}
+
+    if metric not in entry["common_metrics"]:
+        return {**base_row, "Status": "Metric not available for pair"}
+
+    aligned_df, applied_shift = align_pair_data(
+        entry["test_df"],
+        entry["ref_df"],
+        metric,
+        auto_shift_method=auto_shift_method,
+    )
+    if aligned_df.empty:
+        return {**base_row, "Status": "No aligned overlapping data"}
+
+    return {
+        **base_row,
+        "Status": "OK",
+        "Applied Shift (s)": applied_shift,
+        **compute_pair_summary(aligned_df, metric),
+    }
+
+
 def build_cloud_pair_results(
     pair_data: dict,
     metric: str,
@@ -323,41 +414,8 @@ def build_cloud_pair_results(
 
     rows = []
     for pair_id, entry in pair_data.items():
-        meta = entry["meta"]
-        base_row = {
-            "Group": meta["pairing_group"],
-            "Date": meta["date"],
-            "Test File": meta["test_filename"],
-            "Ref File": meta["ref_filename"],
-            "Metric": metric,
-            "Auto-shift": auto_shift_method,
-        }
-
-        if entry.get("error"):
-            rows.append({**base_row, "Status": f"Error: {entry['error']}"})
-            continue
-
-        if metric not in entry["common_metrics"]:
-            rows.append({**base_row, "Status": "Metric not available for pair"})
-            continue
-
-        aligned_df, applied_shift = align_pair_data(
-            entry["test_df"],
-            entry["ref_df"],
-            metric,
-            auto_shift_method=auto_shift_method,
-        )
-        if aligned_df.empty:
-            rows.append({**base_row, "Status": "No aligned overlapping data"})
-            continue
-
         rows.append(
-            {
-                **base_row,
-                "Status": "OK",
-                "Applied Shift (s)": applied_shift,
-                **compute_pair_summary(aligned_df, metric),
-            }
+            build_cloud_pair_result_row(pair_id, entry, metric, auto_shift_method)
         )
 
     return pd.DataFrame(rows)
@@ -508,6 +566,8 @@ def create_cloud_storage_reactives(inputs: Inputs):
     bucket_name = os.getenv("S3_BUCKET")
     aws_profile = os.getenv("AWS_PROFILE")
     manifest_key = os.getenv("CATALOGUE_CSV_KEY")
+    cloud_cache_db_path = get_cloud_cache_db_path()
+    init_cloud_cache(cloud_cache_db_path)
     cloud_analysis_request = reactive.Value(
         {
             "pair_df": pd.DataFrame(columns=PAIR_MANIFEST_COLUMNS),
@@ -532,29 +592,6 @@ def create_cloud_storage_reactives(inputs: Inputs):
         if not isinstance(manifest_df, pd.DataFrame):
             return pd.DataFrame(columns=PAIR_MANIFEST_COLUMNS)
         return build_cloud_pair_manifest(manifest_df)
-
-    @render.ui
-    def cloudManifestStatus():
-        pair_df = _cloud_manifest()
-        if pair_df.empty:
-            return ui.p(
-                "No paired manifest entries available from the configured cloud storage.",
-                style="color: #666;",
-            )
-
-        manifest_location = (
-            f"s3://{bucket_name}/{manifest_key}"
-            if bucket_name and manifest_key
-            else None
-        )
-        filtered_pair_df = _filtered_cloud_manifest()
-        status_text = (
-            f"Loaded {len(pair_df)} manifest-defined pairs from {manifest_location}. "
-            f"{len(filtered_pair_df)} currently match the active filters."
-            if manifest_location
-            else f"Loaded {len(pair_df)} manifest-defined pairs. {len(filtered_pair_df)} currently match the active filters."
-        )
-        return ui.p(status_text, style="color: #666;")
 
     @render.ui
     def cloudGroupSelector():
@@ -656,46 +693,12 @@ def create_cloud_storage_reactives(inputs: Inputs):
     @reactive.Calc
     def _selected_cloud_pair_data():
         request = _cloud_analysis_request()
-        pair_df = request["pair_df"]
-        selected_pair_ids = request["selected_pair_ids"]
-        if pair_df.empty or not selected_pair_ids or not bucket_name:
-            return {}
-
-        selected_pairs = pair_df[pair_df["pair_id"].isin(selected_pair_ids)]
-        pair_data = {}
-        for row in selected_pairs.itertuples(index=False):
-            try:
-                test_url = f"s3://{bucket_name}/{row.test_s3_key}"
-                ref_url = f"s3://{bucket_name}/{row.ref_s3_key}"
-                test_df = process_file(test_url, aws_profile=aws_profile)[
-                    "records"
-                ].copy()
-                ref_df = process_file(ref_url, aws_profile=aws_profile)[
-                    "records"
-                ].copy()
-                test_df["filename"] = row.test_filename
-                ref_df["filename"] = row.ref_filename
-
-                common_metrics = sorted(
-                    (
-                        set(test_df.columns).intersection(ref_df.columns)
-                        - {"timestamp", "filename"}
-                    )
-                )
-                pair_data[row.pair_id] = {
-                    "meta": row._asdict(),
-                    "test_df": test_df,
-                    "ref_df": ref_df,
-                    "common_metrics": common_metrics,
-                }
-            except Exception as exc:
-                logger.error("Error processing cloud pair %s: %s", row.pair_id, exc)
-                pair_data[row.pair_id] = {
-                    "meta": row._asdict(),
-                    "error": str(exc),
-                    "common_metrics": [],
-                }
-        return pair_data
+        return load_cloud_pair_data(
+            request["pair_df"],
+            request["selected_pair_ids"],
+            bucket_name,
+            aws_profile,
+        )
 
     @reactive.Calc
     def _cloud_common_metrics():
@@ -740,20 +743,79 @@ def create_cloud_storage_reactives(inputs: Inputs):
 
     @reactive.Calc
     def _cloud_pair_results():
-        pair_data = _selected_cloud_pair_data()
         request = _cloud_analysis_request()
-        return build_cloud_pair_results(
-            pair_data,
-            request["metric"],
-            request["auto_shift_method"],
-        )
+        pair_df = request["pair_df"]
+        selected_pair_ids = request["selected_pair_ids"]
+        metric = request["metric"]
+        auto_shift_method = request["auto_shift_method"]
+
+        if pair_df.empty or not selected_pair_ids or not metric:
+            return pd.DataFrame()
+
+        selected_pairs_df = pair_df[pair_df["pair_id"].isin(selected_pair_ids)].copy()
+        if selected_pairs_df.empty:
+            return pd.DataFrame()
+
+        cached_rows_by_pair_id = {}
+        missing_pair_ids = []
+        for row in selected_pairs_df.itertuples(index=False):
+            cached_row = get_cached_cloud_pair_summary(
+                test_etag=row.test_etag,
+                ref_etag=row.ref_etag,
+                metric=metric,
+                auto_shift_method=auto_shift_method,
+                db_path=cloud_cache_db_path,
+            )
+            if cached_row is None:
+                missing_pair_ids.append(row.pair_id)
+            else:
+                cached_rows_by_pair_id[row.pair_id] = cached_row
+
+        computed_rows_by_pair_id = {}
+        if missing_pair_ids:
+            missing_pair_data = load_cloud_pair_data(
+                pair_df,
+                missing_pair_ids,
+                bucket_name,
+                aws_profile,
+            )
+            for pair_id, entry in missing_pair_data.items():
+                result_row = build_cloud_pair_result_row(
+                    pair_id,
+                    entry,
+                    metric,
+                    auto_shift_method,
+                )
+                computed_rows_by_pair_id[pair_id] = result_row
+                if result_row.get("Status") == "OK":
+                    meta = entry["meta"]
+                    put_cached_cloud_pair_summary(
+                        test_etag=meta["test_etag"],
+                        ref_etag=meta["ref_etag"],
+                        metric=metric,
+                        auto_shift_method=auto_shift_method,
+                        result_row=result_row,
+                        db_path=cloud_cache_db_path,
+                    )
+
+        ordered_rows = []
+        for row in selected_pairs_df.itertuples(index=False):
+            if row.pair_id in cached_rows_by_pair_id:
+                ordered_rows.append(cached_rows_by_pair_id[row.pair_id])
+            elif row.pair_id in computed_rows_by_pair_id:
+                ordered_rows.append(computed_rows_by_pair_id[row.pair_id])
+
+        return pd.DataFrame(ordered_rows)
 
     @render.data_frame
     def cloudPairSummaryTable():
         result_df = _cloud_pair_results()
         if result_df.empty:
             return pd.DataFrame()
-        return render.DataGrid(result_df, selection_mode="none")
+        return render.DataGrid(
+            result_df.drop(columns=["pair_id"], errors="ignore"),
+            selection_mode="none",
+        )
 
     @render.ui
     def cloudMetricRangePlotGrid():
@@ -781,18 +843,12 @@ def create_cloud_storage_reactives(inputs: Inputs):
     cloudMeanBiasRangePlot = _make_cloud_metric_plot_renderer(
         "cloudMeanBiasRangePlot", "Mean Bias"
     )
-    cloudMaeRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudMaeRangePlot", "MAE"
-    )
-    cloudMseRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudMseRangePlot", "MSE"
-    )
+    cloudMaeRangePlot = _make_cloud_metric_plot_renderer("cloudMaeRangePlot", "MAE")
+    cloudMseRangePlot = _make_cloud_metric_plot_renderer("cloudMseRangePlot", "MSE")
     cloudMapeRangePlot = _make_cloud_metric_plot_renderer(
         "cloudMapeRangePlot", "MAPE (%)"
     )
-    cloudCccRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudCccRangePlot", "CCC"
-    )
+    cloudCccRangePlot = _make_cloud_metric_plot_renderer("cloudCccRangePlot", "CCC")
     cloudPearsonCorrRangePlot = _make_cloud_metric_plot_renderer(
         "cloudPearsonCorrRangePlot", "Pearson Corr"
     )
@@ -811,7 +867,6 @@ def create_cloud_storage_reactives(inputs: Inputs):
         "_selected_cloud_pair_data": _selected_cloud_pair_data,
         "_cloud_common_metrics": _cloud_common_metrics,
         "_cloud_pair_results": _cloud_pair_results,
-        "cloudManifestStatus": cloudManifestStatus,
         "cloudGroupSelector": cloudGroupSelector,
         "cloudDateRangeSelector": cloudDateRangeSelector,
         "cloudPairSelectionTable": cloudPairSelectionTable,

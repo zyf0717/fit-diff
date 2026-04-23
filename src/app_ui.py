@@ -75,7 +75,6 @@ app_ui = ui.page_fluid(
             "Cloud Storage",
             ui.page_sidebar(
                 ui.sidebar(
-                    ui.output_ui("cloudManifestStatus"),
                     ui.output_ui("cloudGroupSelector"),
                     ui.output_ui("cloudDateRangeSelector"),
                     ui.output_ui("cloudAutoShiftSelector"),
