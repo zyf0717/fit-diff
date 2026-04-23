@@ -141,7 +141,7 @@ app_ui = ui.page_fluid(
     ),
     ui.navset_bar(
         ui.nav_panel(
-            "Local Files",
+            "Benchmarking",
             ui.page_sidebar(
                 ui.sidebar(
                     ui.tags.script(
@@ -171,7 +171,7 @@ app_ui = ui.page_fluid(
             ),
         ),
         ui.nav_panel(
-            "Cloud Storage",
+            "Batch Analysis",
             ui.page_sidebar(
                 ui.sidebar(
                     ui.output_ui("cloudGroupSelector"),
@@ -210,7 +210,7 @@ app_ui = ui.page_fluid(
             ),
         ),
         id="mainNavset",
-        title="Fit File Benchmarking Tool",
+        title="FIT-DIFF",
     ),
     theme=shinyswatch.theme.flatly,
 )
