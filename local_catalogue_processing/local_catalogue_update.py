@@ -9,6 +9,11 @@ import pandas as pd
 import yaml
 from garmin_fit_sdk import Decoder, Stream
 
+try:
+    from local_catalogue_processing.fit_overlap import build_folder_fit_overlap_metrics
+except ImportError:
+    from fit_overlap import build_folder_fit_overlap_metrics
+
 
 # Load .env file from root directory
 def load_env():
@@ -118,20 +123,33 @@ def build_file_dataframe(files, base_dir):
     Build a dataframe with filename, relative_path, and tags.
     """
     date_pattern = re.compile(r"\d{8}")
+    overlap_by_path = build_folder_fit_overlap_metrics(files)
     columns = [
         "date",
         "filename",
         "relative_path",
+        "paired_file_path",
+        "overlap_duration",
+        "overlap_datapoints",
         "tags",
     ]
     df = (
         pd.DataFrame(
-            [_build_file_row(path, base_dir, date_pattern) for path in files],
+            [
+                _build_file_row(
+                    path,
+                    base_dir,
+                    date_pattern,
+                    overlap_by_path.get(str(path)),
+                )
+                for path in files
+            ],
             columns=columns,
         )
         .sort_values("relative_path")
         .reset_index(drop=True)
     )
+    df["overlap_datapoints"] = pd.array(df["overlap_datapoints"], dtype="Int64")
 
     return df
 
@@ -434,7 +452,7 @@ def _extract_participant_id(file_path, base_dir):
 #     return None, None
 
 
-def _build_file_row(path, base_dir, date_pattern):
+def _build_file_row(path, base_dir, date_pattern, overlap_metrics=None):
     filename = os.path.basename(path)
     level_tags = build_level_tags(path, base_dir)
     filename_value = os.path.splitext(os.path.basename(str(path)))[0].lower()
@@ -452,7 +470,18 @@ def _build_file_row(path, base_dir, date_pattern):
         "filename": filename,
         "relative_path": os.path.relpath(path, base_dir),
         "date": date_value,
+        "paired_file_path": (
+            os.path.relpath(overlap_metrics.get("paired_file_path"), base_dir)
+            if overlap_metrics and overlap_metrics.get("paired_file_path")
+            else None
+        ),
         "tags": "|".join(tags) if tags else None,
+        "overlap_duration": (
+            overlap_metrics.get("overlap_duration") if overlap_metrics else None
+        ),
+        "overlap_datapoints": (
+            overlap_metrics.get("overlap_datapoints") if overlap_metrics else None
+        ),
     }
     return row
 
@@ -462,6 +491,9 @@ if __name__ == "__main__":
     directory = os.getenv("LOCAL_FOLDER_PATH")
     files = list_local_files(directory)
     df = build_file_dataframe(files, directory)
-    df.to_csv("local_files_catalogue.csv", index=False)
+    df.to_csv(
+        f"data_files_manifest_{datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d')}.csv",
+        index=False,
+    )
     elapsed = time.perf_counter() - start_time
     logger.info("local_catalogue_update completed in %.2f seconds", elapsed)
