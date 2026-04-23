@@ -10,17 +10,27 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     @render.ui
     def benchmarkingContent():
-        # Only render main content when at least one file from each type is uploaded
-        test_files = inputs.testFileUpload()
-        ref_files = inputs.refFileUpload()
-
-        if not test_files or not ref_files:
+        if not file_reactives["_has_active_files"]():
             return ui.div(
                 ui.p(
-                    "Please upload at least one test file and one reference file to begin."
+                    "Please upload at least one test file and one reference file, or select a point in Cloud Storage."
                 ),
                 style="text-align: center; margin-top: 50px; color: #666;",
             )
+
+        preferred_auto_shift_method = file_reactives["_preferred_auto_shift_method"]()
+        auto_shift_choices = [
+            "None (manual)",
+            "Minimize MAE",
+            "Minimize MSE",
+            "Maximize Concordance Correlation",
+            "Maximize Pearson Correlation",
+        ]
+        selected_auto_shift_method = (
+            preferred_auto_shift_method
+            if preferred_auto_shift_method in auto_shift_choices
+            else "None (manual)"
+        )
 
         return ui.div(
             ui.layout_columns(
@@ -77,14 +87,8 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                 ui.input_select(
                     "auto_shift_method",
                     "Auto-shift by:",
-                    choices=[
-                        "None (manual)",
-                        "Minimize MAE",
-                        "Minimize MSE",
-                        "Maximize Concordance Correlation",
-                        "Maximize Pearson Correlation",
-                    ],
-                    selected="None (manual)",
+                    choices=auto_shift_choices,
+                    selected=selected_auto_shift_method,
                 ),
                 ui.output_ui("shiftSecondsText"),
                 col_widths=[3, 3, 3, 3],
@@ -226,13 +230,11 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     @render.ui
     def testFileSelector():
-        test_files = inputs.testFileUpload()
-        if not test_files:
+        file_names = file_reactives["_active_test_file_names"]()
+        if not file_names:
             return None
 
-        file_choices = {
-            file_info["name"]: file_info["name"] for file_info in test_files
-        }
+        file_choices = {file_name: file_name for file_name in file_names}
         return ui.input_selectize(
             "selected_test_files",
             "Select test file(s) to use:",
@@ -243,11 +245,11 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     @render.ui
     def refFileSelector():
-        ref_files = inputs.refFileUpload()
-        if not ref_files:
+        file_names = file_reactives["_active_ref_file_names"]()
+        if not file_names:
             return None
 
-        file_choices = {file_info["name"]: file_info["name"] for file_info in ref_files}
+        file_choices = {file_name: file_name for file_name in file_names}
         return ui.input_selectize(
             "selected_ref_files",
             "Select reference file(s) to use:",
@@ -261,11 +263,17 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         choices = file_reactives["_get_common_metrics"]()
         if not choices:
             return None
+
+        preferred_metric = file_reactives["_preferred_comparison_metric"]()
+        selected_metric = preferred_metric if preferred_metric in choices else None
+        if selected_metric is None:
+            selected_metric = "heart_rate" if "heart_rate" in choices else choices[0]
+
         return ui.input_select(
             "comparison_metric",
             "Select comparison metric:",
             choices=choices,
-            selected="heart_rate",
+            selected=selected_metric,
         )
 
     @render.ui

@@ -209,6 +209,7 @@ app_ui = ui.page_fluid(
                 ),
             ),
         ),
+        id="mainNavset",
         title="Fit File Benchmarking Tool",
     ),
     theme=shinyswatch.theme.flatly,

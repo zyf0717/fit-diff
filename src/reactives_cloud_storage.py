@@ -512,6 +512,7 @@ def create_cloud_metric_range_plot(
     metric_name: str,
     benchmark_indicator: float | None = None,
     theme_settings=None,
+    selected_pair_id: str | None = None,
 ):
     """Create one horizontal range-strip plot for a single cloud summary metric."""
 
@@ -550,6 +551,34 @@ def create_cloud_metric_range_plot(
     if benchmark_indicator is not None and np.isfinite(benchmark_indicator):
         benchmark_value = float(benchmark_indicator)
     theme = get_plotly_theme(theme_settings)
+    theme_mode = (
+        str(theme_settings.get("mode", "light")).lower()
+        if hasattr(theme_settings, "get")
+        else "light"
+    )
+    default_marker_color = "#2c7fb8"
+    selected_marker_color = "#8ec5ff" if theme_mode == "dark" else "#084298"
+
+    if "pair_id" in plot_df.columns:
+        pair_ids = plot_df["pair_id"].tolist()
+        marker_colors = [
+            (
+                selected_marker_color
+                if pair_id == selected_pair_id
+                else default_marker_color
+            )
+            for pair_id in pair_ids
+        ]
+        marker_sizes = [
+            12 if pair_id == selected_pair_id else 10 for pair_id in pair_ids
+        ]
+        marker_line_widths = [
+            2 if pair_id == selected_pair_id else 1 for pair_id in pair_ids
+        ]
+    else:
+        marker_colors = default_marker_color
+        marker_sizes = 10
+        marker_line_widths = 1
 
     axis_values = finite_values.tolist()
     if benchmark_value is not None:
@@ -603,7 +632,12 @@ def create_cloud_metric_range_plot(
             x=metric_values,
             y=[0] * len(plot_df),
             mode="markers",
-            marker={"size": 10, "color": "#2c7fb8", "line": {"width": 1}},
+            marker={
+                "size": marker_sizes,
+                "color": marker_colors,
+                "line": {"width": marker_line_widths},
+            },
+            customdata=plot_df["pair_id"] if "pair_id" in plot_df.columns else None,
             text=hover_text,
             hovertemplate="%{text}<br>" + metric_name + ": %{x}<extra></extra>",
             showlegend=False,
@@ -701,7 +735,9 @@ def align_pair_data(
     return aligned_df, applied_shift
 
 
-def create_cloud_storage_reactives(inputs: Inputs):
+def create_cloud_storage_reactives(
+    inputs: Inputs, session=None, local_pair_override=None
+):
     """Create Cloud Storage reactive functions."""
 
     bucket_name = os.getenv("S3_BUCKET")
@@ -710,6 +746,7 @@ def create_cloud_storage_reactives(inputs: Inputs):
     cloud_cache_db_path = get_cloud_cache_db_path()
     init_cloud_cache(cloud_cache_db_path)
     cloud_analysis_request = reactive.Value(None)
+    selected_cloud_plot_pair_id = reactive.Value(None)
 
     def _safe_input(input_name, default=None):
         try:
@@ -823,6 +860,27 @@ def create_cloud_storage_reactives(inputs: Inputs):
     @reactive.Calc
     def _cloud_analysis_request():
         return cloud_analysis_request.get()
+
+    def _build_local_pair_override(pair_id: str, request: dict):
+        pair_data = load_cloud_pair_data(
+            request["pair_df"],
+            [pair_id],
+            bucket_name,
+            aws_profile,
+        )
+        entry = pair_data.get(pair_id)
+        if not entry or entry.get("error"):
+            return None
+
+        return {
+            "pair_id": pair_id,
+            "metric": request["metric"],
+            "auto_shift_method": request["auto_shift_method"],
+            "test_filename": entry["meta"]["test_filename"],
+            "ref_filename": entry["meta"]["ref_filename"],
+            "test_df": entry["test_df"].copy(),
+            "ref_df": entry["ref_df"].copy(),
+        }
 
     @reactive.Calc
     def _selected_cloud_pair_data():
@@ -944,6 +1002,18 @@ def create_cloud_storage_reactives(inputs: Inputs):
 
         return pd.DataFrame(ordered_rows)
 
+    @reactive.Effect
+    def _clear_selected_cloud_pair_if_missing():
+        results_df = _cloud_pair_results()
+        current_pair_id = selected_cloud_plot_pair_id.get()
+        if current_pair_id is None:
+            return
+        if (
+            results_df.empty
+            or current_pair_id not in results_df.get("pair_id", []).tolist()
+        ):
+            selected_cloud_plot_pair_id.set(None)
+
     @render.data_frame
     def cloudPairSummaryTable():
         result_df = _cloud_pair_results()
@@ -976,12 +1046,57 @@ def create_cloud_storage_reactives(inputs: Inputs):
         benchmark_indicator: float | None = None,
     ):
         def _plot():
-            return create_cloud_metric_range_plot(
-                _cloud_pair_results(),
+            results_df = _cloud_pair_results()
+            request = _cloud_analysis_request()
+            figure = create_cloud_metric_range_plot(
+                results_df,
                 metric_name,
                 benchmark_indicator=benchmark_indicator,
                 theme_settings=_safe_input("plotly_theme"),
+                selected_pair_id=selected_cloud_plot_pair_id.get(),
             )
+
+            figure_widget = go.FigureWidget(figure)
+            plot_df = results_df[results_df["Status"] == "OK"].reset_index(drop=True)
+            marker_trace = next(
+                (
+                    trace
+                    for trace in figure_widget.data
+                    if getattr(trace, "type", None) == "scatter"
+                    and getattr(trace, "mode", None) == "markers"
+                ),
+                None,
+            )
+
+            if marker_trace is not None and not plot_df.empty and request is not None:
+
+                def _handle_click(_trace, points, _selector):
+                    if not points.point_inds:
+                        return
+
+                    point_index = points.point_inds[0]
+                    if point_index >= len(plot_df):
+                        return
+
+                    pair_id = plot_df.iloc[point_index].get("pair_id")
+                    if not pair_id:
+                        return
+
+                    selected_cloud_plot_pair_id.set(pair_id)
+                    if local_pair_override is not None:
+                        pair_override = _build_local_pair_override(pair_id, request)
+                        if pair_override is not None:
+                            local_pair_override.set(pair_override)
+                    if session is not None:
+                        ui.update_navs(
+                            "mainNavset",
+                            selected="Local Files",
+                            session=session,
+                        )
+
+                marker_trace.on_click(_handle_click)
+
+            return figure_widget
 
         _plot.__name__ = output_id
         return render_widget(_plot)

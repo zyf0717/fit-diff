@@ -323,6 +323,41 @@ def test_create_cloud_metric_range_plot_applies_dark_theme_colors():
     assert figure.data[1].fillcolor == "rgba(248, 249, 250, 0.22)"
 
 
+def test_create_cloud_metric_range_plot_highlights_selected_pair():
+    results_df = pd.DataFrame(
+        [
+            {
+                "pair_id": "pair-1",
+                "Group": "yifei",
+                "Date": "2025-08-01",
+                "Test File": "test-a.fit",
+                "Ref File": "ref-a.fit",
+                "Status": "OK",
+                "Mean Bias": 1.0,
+            },
+            {
+                "pair_id": "pair-2",
+                "Group": "yifei",
+                "Date": "2025-08-02",
+                "Test File": "test-b.fit",
+                "Ref File": "ref-b.fit",
+                "Status": "OK",
+                "Mean Bias": 2.0,
+            },
+        ]
+    )
+
+    figure = create_cloud_metric_range_plot(
+        results_df,
+        "Mean Bias",
+        selected_pair_id="pair-2",
+    )
+
+    marker_trace = figure.data[2]
+    assert list(marker_trace.marker.color) == ["#2c7fb8", "#084298"]
+    assert list(marker_trace.marker.size) == [10, 12]
+
+
 def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
     results_df = pd.DataFrame(
         [

@@ -17,9 +17,12 @@ def server(inputs: Inputs, output: Outputs, session: Session):
     # Create shared/cross-module reactive values
     metric_plot_x_range = reactive.Value(None)
     metric_plot_y_range = reactive.Value(None)
+    local_pair_override = reactive.Value(None)
 
     # Create reactive groups
-    file_reactives = create_file_handling_reactives(inputs, session)
+    file_reactives = create_file_handling_reactives(
+        inputs, session, local_pair_override
+    )
     data_reactives = create_data_processing_reactives(
         inputs, file_reactives, metric_plot_x_range, metric_plot_y_range
     )
@@ -30,7 +33,11 @@ def server(inputs: Inputs, output: Outputs, session: Session):
     statistics_reactives = create_statistics_reactives(
         inputs, file_reactives, data_reactives
     )
-    cloud_storage_reactives = create_cloud_storage_reactives(inputs)
+    cloud_storage_reactives = create_cloud_storage_reactives(
+        inputs,
+        session=session,
+        local_pair_override=local_pair_override,
+    )
 
     # Enable dynamic theme switching
     shinyswatch.theme_picker_server()
