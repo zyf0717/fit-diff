@@ -560,7 +560,9 @@ def create_cloud_metric_range_plot(
         else "light"
     )
     default_marker_color = "#2c7fb8"
-    selected_marker_color = "#8ec5ff" if theme_mode == "dark" else "#084298"
+    selected_marker_color = "#f8f9fa" if theme_mode == "dark" else "#212529"
+    default_marker_line_color = "#ffffff" if theme_mode == "dark" else "#1f4e6d"
+    selected_marker_line_color = "#212529" if theme_mode == "dark" else "#f8f9fa"
 
     if "pair_id" in plot_df.columns:
         pair_ids = plot_df["pair_id"].tolist()
@@ -578,10 +580,19 @@ def create_cloud_metric_range_plot(
         marker_line_widths = [
             2 if pair_id == selected_pair_id else 1 for pair_id in pair_ids
         ]
+        marker_line_colors = [
+            (
+                selected_marker_line_color
+                if pair_id == selected_pair_id
+                else default_marker_line_color
+            )
+            for pair_id in pair_ids
+        ]
     else:
         marker_colors = default_marker_color
         marker_sizes = 10
         marker_line_widths = 1
+        marker_line_colors = default_marker_line_color
 
     axis_values = finite_values.tolist()
     if benchmark_value is not None:
@@ -638,7 +649,10 @@ def create_cloud_metric_range_plot(
             marker={
                 "size": marker_sizes,
                 "color": marker_colors,
-                "line": {"width": marker_line_widths},
+                "line": {
+                    "width": marker_line_widths,
+                    "color": marker_line_colors,
+                },
             },
             customdata=plot_df["pair_id"] if "pair_id" in plot_df.columns else None,
             text=hover_text,

@@ -365,7 +365,8 @@ def test_create_cloud_metric_range_plot_highlights_selected_pair():
     )
 
     marker_trace = figure.data[2]
-    assert list(marker_trace.marker.color) == ["#2c7fb8", "#084298"]
+    assert list(marker_trace.marker.color) == ["#2c7fb8", "#212529"]
+    assert list(marker_trace.marker.line.color) == ["#1f4e6d", "#f8f9fa"]
     assert list(marker_trace.marker.size) == [10, 12]
 
 
