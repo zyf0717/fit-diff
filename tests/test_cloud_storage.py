@@ -3,15 +3,15 @@ import plotly.graph_objects as go
 
 from src.reactives_cloud_storage import (
     align_pair_data,
+    build_cloud_pair_manifest,
     build_cloud_pair_results,
     build_cloud_pair_selection_table,
-    build_cloud_pair_manifest,
     compute_pair_summary,
     create_cloud_metric_range_plot,
     filter_cloud_pair_manifest,
-    get_selected_cloud_pair_ids,
     get_cloud_manifest_date_bounds,
     get_cloud_manifest_groups,
+    get_selected_cloud_pair_ids,
 )
 
 
@@ -24,7 +24,7 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
                 "pairing_group": "yifei",
                 "pair_index": 1,
                 "date": "2025-08-04",
-                "paired_overlap_pct": 87.5,
+                "paired_overlap_pct": 0.875,
                 "filename": "test.fit",
                 "device_type": "test",
                 "s3_key": "fit_files/yifei/test.fit",
@@ -50,7 +50,7 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
     assert row["ref_etag"] == "ref-etag"
     assert row["test_s3_key"] == "fit_files/yifei/test.fit"
     assert row["ref_s3_key"] == "fit_files/yifei/ref.fit"
-    assert row["paired_overlap_pct"] == 87.5
+    assert row["paired_overlap_pct"] == 0.875
     assert "test.fit <> ref.fit" in row["pair_label"]
 
 
@@ -170,7 +170,7 @@ def test_build_cloud_pair_selection_table_returns_sortable_display_columns():
                 "pair_id": "p1",
                 "pairing_group": "yifei",
                 "date": "2025-08-01",
-                "paired_overlap_pct": 72.3456,
+                "paired_overlap_pct": 0.723456,
                 "test_filename": "test.fit",
                 "ref_filename": "ref.fit",
             }
@@ -191,7 +191,7 @@ def test_build_cloud_pair_selection_table_returns_sortable_display_columns():
         "Date": "2025-08-01",
         "Test File": "test.fit",
         "Ref File": "ref.fit",
-        "Overlap (%)": 72.346,
+        "Overlap (%)": 72.35,
     }
 
 
@@ -236,9 +236,7 @@ def test_build_cloud_pair_results_returns_summary_rows():
         }
     }
 
-    result_df = build_cloud_pair_results(
-        pair_data, "heart_rate", "Minimize MAE"
-    )
+    result_df = build_cloud_pair_results(pair_data, "heart_rate", "Minimize MAE")
 
     assert result_df.iloc[0]["Status"] == "OK"
     assert result_df.iloc[0]["Metric"] == "heart_rate"

@@ -12,14 +12,16 @@ from shiny.types import SilentException
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
+    calculate_ccc,
+    determine_optimal_shift,
+    get_cached_cloud_pair_common_metrics,
     get_cached_cloud_pair_summary,
     get_cloud_cache_db_path,
     init_cloud_cache,
-    put_cached_cloud_pair_summary,
-    calculate_ccc,
-    determine_optimal_shift,
     prepare_data_for_analysis,
     process_file,
+    put_cached_cloud_pair_common_metrics,
+    put_cached_cloud_pair_summary,
     read_catalogue,
 )
 
@@ -47,26 +49,48 @@ PAIR_SELECTION_TABLE_COLUMNS = [
     "Ref File",
     "Overlap (%)",
 ]
-RANGE_PLOT_METRICS = [
-    "Mean Bias",
-    "MAE",
-    "MSE",
-    "MAPE (%)",
-    "CCC",
-    "Pearson Corr",
-    "LoA Lower",
-    "LoA Upper",
+RANGE_PLOT_SPECS = [
+    {
+        "metric_name": "Mean Bias",
+        "card_title": "Mean Bias",
+        "output_id": "cloudMeanBiasRangePlot",
+    },
+    {
+        "metric_name": "MAE",
+        "card_title": "Mean Absolute Error",
+        "output_id": "cloudMaeRangePlot",
+    },
+    {
+        "metric_name": "MSE",
+        "card_title": "Mean Squared Error",
+        "output_id": "cloudMseRangePlot",
+    },
+    {
+        "metric_name": "MAPE (%)",
+        "card_title": "Mean Absolute Percentage Error (%)",
+        "output_id": "cloudMapeRangePlot",
+    },
+    {
+        "metric_name": "CCC",
+        "card_title": "Concordance Correlation Coefficient",
+        "output_id": "cloudCccRangePlot",
+    },
+    {
+        "metric_name": "Pearson Corr",
+        "card_title": "Pearson Correlation",
+        "output_id": "cloudPearsonCorrRangePlot",
+    },
+    {
+        "metric_name": "LoA Lower",
+        "card_title": "Lower Limit of Agreement",
+        "output_id": "cloudLoaLowerRangePlot",
+    },
+    {
+        "metric_name": "LoA Upper",
+        "card_title": "Upper Limit of Agreement",
+        "output_id": "cloudLoaUpperRangePlot",
+    },
 ]
-RANGE_PLOT_OUTPUT_IDS = {
-    "Mean Bias": "cloudMeanBiasRangePlot",
-    "MAE": "cloudMaeRangePlot",
-    "MSE": "cloudMseRangePlot",
-    "MAPE (%)": "cloudMapeRangePlot",
-    "CCC": "cloudCccRangePlot",
-    "Pearson Corr": "cloudPearsonCorrRangePlot",
-    "LoA Lower": "cloudLoaLowerRangePlot",
-    "LoA Upper": "cloudLoaUpperRangePlot",
-}
 
 
 def _coerce_manifest_date(value):
@@ -232,7 +256,7 @@ def build_cloud_pair_selection_table(pair_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=PAIR_SELECTION_TABLE_COLUMNS)
 
     overlap_pct = (
-        pair_df["paired_overlap_pct"].round(3)
+        (pair_df["paired_overlap_pct"] * 100).round(2)
         if "paired_overlap_pct" in pair_df.columns
         else np.nan
     )
@@ -362,6 +386,58 @@ def load_cloud_pair_data(
     return pair_data
 
 
+def load_cached_or_compute_common_metrics(
+    pair_df: pd.DataFrame,
+    selected_pair_ids: list[str],
+    bucket_name: str | None,
+    aws_profile: str | None,
+    db_path,
+) -> list[str]:
+    """Return shared common metrics for selected pairs using cache first."""
+    if not isinstance(pair_df, pd.DataFrame) or pair_df.empty or not selected_pair_ids:
+        return []
+
+    selected_pairs_df = pair_df[pair_df["pair_id"].isin(selected_pair_ids)].copy()
+    if selected_pairs_df.empty:
+        return []
+
+    metric_sets = []
+    missing_pair_ids = []
+    for row in selected_pairs_df.itertuples(index=False):
+        cached_metrics = get_cached_cloud_pair_common_metrics(
+            test_etag=row.test_etag,
+            ref_etag=row.ref_etag,
+            db_path=db_path,
+        )
+        if cached_metrics is None:
+            missing_pair_ids.append(row.pair_id)
+            continue
+        metric_sets.append(set(cached_metrics))
+
+    if missing_pair_ids:
+        missing_pair_data = load_cloud_pair_data(
+            pair_df,
+            missing_pair_ids,
+            bucket_name,
+            aws_profile,
+        )
+        for pair_id, entry in missing_pair_data.items():
+            common_metrics = entry.get("common_metrics", [])
+            if common_metrics:
+                meta = entry["meta"]
+                put_cached_cloud_pair_common_metrics(
+                    test_etag=meta["test_etag"],
+                    ref_etag=meta["ref_etag"],
+                    common_metrics=common_metrics,
+                    db_path=db_path,
+                )
+                metric_sets.append(set(common_metrics))
+
+    if not metric_sets:
+        return []
+    return sorted(set.intersection(*metric_sets))
+
+
 def build_cloud_pair_result_row(
     pair_id: str,
     entry: dict,
@@ -479,7 +555,7 @@ def create_cloud_metric_range_plot(results_df: pd.DataFrame, metric_name: str):
     )
 
     fig.update_layout(
-        height=260,
+        height=150,
         margin={"l": 40, "r": 20, "t": 10, "b": 40},
         paper_bgcolor="white",
         plot_bgcolor="white",
@@ -568,14 +644,7 @@ def create_cloud_storage_reactives(inputs: Inputs):
     manifest_key = os.getenv("CATALOGUE_CSV_KEY")
     cloud_cache_db_path = get_cloud_cache_db_path()
     init_cloud_cache(cloud_cache_db_path)
-    cloud_analysis_request = reactive.Value(
-        {
-            "pair_df": pd.DataFrame(columns=PAIR_MANIFEST_COLUMNS),
-            "selected_pair_ids": [],
-            "metric": "heart_rate",
-            "auto_shift_method": "Minimize MAE",
-        }
-    )
+    cloud_analysis_request = reactive.Value(None)
 
     def _safe_input(input_name, default=None):
         try:
@@ -693,6 +762,8 @@ def create_cloud_storage_reactives(inputs: Inputs):
     @reactive.Calc
     def _selected_cloud_pair_data():
         request = _cloud_analysis_request()
+        if request is None:
+            return {}
         return load_cloud_pair_data(
             request["pair_df"],
             request["selected_pair_ids"],
@@ -702,15 +773,13 @@ def create_cloud_storage_reactives(inputs: Inputs):
 
     @reactive.Calc
     def _cloud_common_metrics():
-        pair_data = _selected_cloud_pair_data()
-        metric_sets = [
-            set(entry["common_metrics"])
-            for entry in pair_data.values()
-            if entry.get("common_metrics")
-        ]
-        if not metric_sets:
-            return []
-        return sorted(set.intersection(*metric_sets))
+        return load_cached_or_compute_common_metrics(
+            _filtered_cloud_manifest(),
+            _selected_cloud_pair_ids(),
+            bucket_name,
+            aws_profile,
+            cloud_cache_db_path,
+        )
 
     @render.ui
     def cloudMetricSelector():
@@ -744,6 +813,8 @@ def create_cloud_storage_reactives(inputs: Inputs):
     @reactive.Calc
     def _cloud_pair_results():
         request = _cloud_analysis_request()
+        if request is None:
+            return pd.DataFrame()
         pair_df = request["pair_df"]
         selected_pair_ids = request["selected_pair_ids"]
         metric = request["metric"]
@@ -795,6 +866,7 @@ def create_cloud_storage_reactives(inputs: Inputs):
                         metric=metric,
                         auto_shift_method=auto_shift_method,
                         result_row=result_row,
+                        common_metrics=entry.get("common_metrics"),
                         db_path=cloud_cache_db_path,
                     )
 
@@ -820,14 +892,14 @@ def create_cloud_storage_reactives(inputs: Inputs):
     @render.ui
     def cloudMetricRangePlotGrid():
         cards = []
-        for metric_name in RANGE_PLOT_METRICS:
+        for spec in RANGE_PLOT_SPECS:
             cards.append(
                 ui.card(
-                    ui.card_header(metric_name),
+                    ui.card_header(spec["card_title"]),
                     output_widget(
-                        RANGE_PLOT_OUTPUT_IDS[metric_name],
-                        height="300px",
-                        fill=False,
+                        spec["output_id"],
+                        height="150px",
+                        fill=True,
                     ),
                 )
             )
@@ -840,24 +912,12 @@ def create_cloud_storage_reactives(inputs: Inputs):
         _plot.__name__ = output_id
         return render_widget(_plot)
 
-    cloudMeanBiasRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudMeanBiasRangePlot", "Mean Bias"
-    )
-    cloudMaeRangePlot = _make_cloud_metric_plot_renderer("cloudMaeRangePlot", "MAE")
-    cloudMseRangePlot = _make_cloud_metric_plot_renderer("cloudMseRangePlot", "MSE")
-    cloudMapeRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudMapeRangePlot", "MAPE (%)"
-    )
-    cloudCccRangePlot = _make_cloud_metric_plot_renderer("cloudCccRangePlot", "CCC")
-    cloudPearsonCorrRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudPearsonCorrRangePlot", "Pearson Corr"
-    )
-    cloudLoaLowerRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudLoaLowerRangePlot", "LoA Lower"
-    )
-    cloudLoaUpperRangePlot = _make_cloud_metric_plot_renderer(
-        "cloudLoaUpperRangePlot", "LoA Upper"
-    )
+    cloud_metric_plot_renderers = {
+        spec["output_id"]: _make_cloud_metric_plot_renderer(
+            spec["output_id"], spec["metric_name"]
+        )
+        for spec in RANGE_PLOT_SPECS
+    }
 
     return {
         "_cloud_manifest": _cloud_manifest,
@@ -873,13 +933,6 @@ def create_cloud_storage_reactives(inputs: Inputs):
         "cloudMetricSelector": cloudMetricSelector,
         "cloudAutoShiftSelector": cloudAutoShiftSelector,
         "cloudMetricRangePlotGrid": cloudMetricRangePlotGrid,
-        "cloudMeanBiasRangePlot": cloudMeanBiasRangePlot,
-        "cloudMaeRangePlot": cloudMaeRangePlot,
-        "cloudMseRangePlot": cloudMseRangePlot,
-        "cloudMapeRangePlot": cloudMapeRangePlot,
-        "cloudCccRangePlot": cloudCccRangePlot,
-        "cloudPearsonCorrRangePlot": cloudPearsonCorrRangePlot,
-        "cloudLoaLowerRangePlot": cloudLoaLowerRangePlot,
-        "cloudLoaUpperRangePlot": cloudLoaUpperRangePlot,
+        **cloud_metric_plot_renderers,
         "cloudPairSummaryTable": cloudPairSummaryTable,
     }

@@ -9,9 +9,11 @@ from the separate modules.
 from .cloud_cache import (
     build_cloud_pair_summary_cache_key,
     clear_cloud_cache,
+    get_cached_cloud_pair_common_metrics,
     get_cached_cloud_pair_summary,
     get_cloud_cache_db_path,
     init_cloud_cache,
+    put_cached_cloud_pair_common_metrics,
     put_cached_cloud_pair_summary,
 )
 
@@ -51,9 +53,11 @@ __all__ = [
     # Cloud cache
     "build_cloud_pair_summary_cache_key",
     "clear_cloud_cache",
+    "get_cached_cloud_pair_common_metrics",
     "get_cached_cloud_pair_summary",
     "get_cloud_cache_db_path",
     "init_cloud_cache",
+    "put_cached_cloud_pair_common_metrics",
     "put_cached_cloud_pair_summary",
     # Data processing
     "determine_optimal_shift",

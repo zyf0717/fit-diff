@@ -103,11 +103,12 @@ app_ui = ui.page_fluid(
                 ),
                 ui.hr(),
                 ui.output_ui("cloudMetricRangePlotGrid"),
+                ui.hr(),
                 ui.card(
                     ui.card_header("Per-Pair Summary"),
                     ui.output_data_frame("cloudPairSummaryTable"),
                 ),
-            )
+            ),
         ),
         title="Fit File Benchmarking Tool",
     ),

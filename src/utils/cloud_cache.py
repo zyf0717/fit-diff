@@ -12,7 +12,9 @@ from typing import Any
 
 import pandas as pd
 
-CLOUD_PAIR_SUMMARY_CACHE_SCHEMA_VERSION = "cloud_pair_summary_v1"
+CLOUD_PAIR_SUMMARY_CACHE_SCHEMA_VERSION = "cloud_pair_summary_v2"
+PAIR_METADATA_METRIC = "__pair_metadata__"
+PAIR_METADATA_AUTO_SHIFT_METHOD = "__pair_metadata__"
 DEFAULT_CACHE_DB_PATH = (
     Path(__file__).resolve().parents[2] / ".cache" / "fit_diff_cloud_cache.sqlite3"
 )
@@ -49,6 +51,7 @@ def init_cloud_cache(db_path: Path | None = None) -> None:
                 auto_shift_method TEXT NOT NULL,
                 schema_version TEXT NOT NULL,
                 status TEXT NOT NULL,
+                common_metrics_json TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 result_json TEXT NOT NULL
@@ -85,6 +88,10 @@ def build_cloud_pair_summary_cache_key(
 
 def _normalize_json_value(value: Any):
     """Convert pandas/numpy scalars to JSON-safe Python values."""
+    if isinstance(value, list):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_json_value(item) for key, item in value.items()}
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
@@ -126,12 +133,40 @@ def get_cached_cloud_pair_summary(
     return json.loads(row["result_json"])
 
 
+def get_cached_cloud_pair_common_metrics(
+    test_etag: str,
+    ref_etag: str,
+    schema_version: str = CLOUD_PAIR_SUMMARY_CACHE_SCHEMA_VERSION,
+    db_path: Path | None = None,
+):
+    """Return cached common metrics for one test/ref pair when present."""
+    init_cloud_cache(db_path)
+    with _connect_cache_db(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT common_metrics_json
+            FROM cloud_pair_summary_cache
+            WHERE test_etag = ?
+              AND ref_etag = ?
+              AND schema_version = ?
+              AND common_metrics_json IS NOT NULL
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (test_etag, ref_etag, schema_version),
+        ).fetchone()
+    if row is None or row["common_metrics_json"] is None:
+        return None
+    return json.loads(row["common_metrics_json"])
+
+
 def put_cached_cloud_pair_summary(
     test_etag: str,
     ref_etag: str,
     metric: str,
     auto_shift_method: str,
     result_row: dict[str, Any],
+    common_metrics: list[str] | None = None,
     schema_version: str = CLOUD_PAIR_SUMMARY_CACHE_SCHEMA_VERSION,
     db_path: Path | None = None,
 ) -> None:
@@ -148,6 +183,11 @@ def put_cached_cloud_pair_summary(
     normalized_row = {
         key: _normalize_json_value(value) for key, value in result_row.items()
     }
+    common_metrics_json = (
+        json.dumps(sorted(common_metrics))
+        if common_metrics
+        else None
+    )
     with _connect_cache_db(db_path) as connection:
         connection.execute(
             """
@@ -159,13 +199,15 @@ def put_cached_cloud_pair_summary(
                 auto_shift_method,
                 schema_version,
                 status,
+                common_metrics_json,
                 created_at,
                 updated_at,
                 result_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(cache_key) DO UPDATE SET
                 status = excluded.status,
+                common_metrics_json = excluded.common_metrics_json,
                 updated_at = excluded.updated_at,
                 result_json = excluded.result_json
             """,
@@ -177,11 +219,32 @@ def put_cached_cloud_pair_summary(
                 auto_shift_method,
                 schema_version,
                 str(normalized_row.get("Status", "UNKNOWN")),
+                common_metrics_json,
                 now,
                 now,
                 json.dumps(normalized_row, sort_keys=True),
             ),
         )
+
+
+def put_cached_cloud_pair_common_metrics(
+    test_etag: str,
+    ref_etag: str,
+    common_metrics: list[str],
+    schema_version: str = CLOUD_PAIR_SUMMARY_CACHE_SCHEMA_VERSION,
+    db_path: Path | None = None,
+) -> None:
+    """Persist common metrics for one test/ref pair in the cache table."""
+    put_cached_cloud_pair_summary(
+        test_etag=test_etag,
+        ref_etag=ref_etag,
+        metric=PAIR_METADATA_METRIC,
+        auto_shift_method=PAIR_METADATA_AUTO_SHIFT_METHOD,
+        result_row={"Status": "METADATA", "common_metrics": sorted(common_metrics)},
+        common_metrics=common_metrics,
+        schema_version=schema_version,
+        db_path=db_path,
+    )
 
 
 def clear_cloud_cache(db_path: Path | None = None) -> None:
