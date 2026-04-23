@@ -2,13 +2,113 @@
 Visualization utilities using Plotly.
 """
 
+from collections.abc import Mapping
 from typing import Union
 
 import pandas as pd
 import plotly.graph_objects as go
 
+LIGHT_PLOTLY_THEME = {
+    "paper_bgcolor": "rgba(0, 0, 0, 0)",
+    "plot_bgcolor": "rgba(0, 0, 0, 0)",
+    "font_color": "#212529",
+    "axis_color": "rgba(33, 37, 41, 0.7)",
+    "grid_color": "rgba(33, 37, 41, 0.15)",
+    "muted_color": "rgba(33, 37, 41, 0.25)",
+    "annotation_bgcolor": "rgba(255, 255, 255, 0.9)",
+    "zero_line_color": "rgba(33, 37, 41, 0.4)",
+    "box_fill_color": "rgba(33, 37, 41, 0.14)",
+    "box_line_color": "rgba(33, 37, 41, 0.28)",
+}
 
-def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure, None]:
+DARK_PLOTLY_THEME = {
+    "paper_bgcolor": "rgba(0, 0, 0, 0)",
+    "plot_bgcolor": "rgba(0, 0, 0, 0)",
+    "font_color": "#f8f9fa",
+    "axis_color": "rgba(248, 249, 250, 0.8)",
+    "grid_color": "rgba(248, 249, 250, 0.2)",
+    "muted_color": "rgba(248, 249, 250, 0.35)",
+    "annotation_bgcolor": "rgba(33, 37, 41, 0.92)",
+    "zero_line_color": "rgba(248, 249, 250, 0.55)",
+    "box_fill_color": "rgba(248, 249, 250, 0.22)",
+    "box_line_color": "rgba(248, 249, 250, 0.42)",
+}
+
+
+def get_plotly_theme(theme_settings=None) -> dict:
+    """Resolve Plotly colors from a client-provided theme payload."""
+    mode = "light"
+    if isinstance(theme_settings, Mapping):
+        mode = str(theme_settings.get("mode", "light")).lower()
+
+    theme = (DARK_PLOTLY_THEME if mode == "dark" else LIGHT_PLOTLY_THEME).copy()
+    if not isinstance(theme_settings, Mapping):
+        return theme
+
+    for key in theme:
+        value = theme_settings.get(key)
+        if isinstance(value, str) and value.strip():
+            theme[key] = value.strip()
+
+    return theme
+
+
+def apply_plotly_theme(fig: go.Figure, theme_settings=None) -> go.Figure:
+    """Apply shared Plotly layout styling for the active app theme."""
+    theme = get_plotly_theme(theme_settings)
+
+    fig.update_layout(
+        paper_bgcolor=theme["paper_bgcolor"],
+        plot_bgcolor=theme["plot_bgcolor"],
+        font={"color": theme["font_color"]},
+        title_font={"color": theme["font_color"]},
+        legend={
+            "bgcolor": "rgba(0, 0, 0, 0)",
+            "font": {"color": theme["font_color"]},
+        },
+        hoverlabel={
+            "bgcolor": theme["annotation_bgcolor"],
+            "font": {"color": theme["font_color"]},
+        },
+    )
+    fig.update_xaxes(
+        color=theme["font_color"],
+        gridcolor=theme["grid_color"],
+        linecolor=theme["axis_color"],
+        zerolinecolor=theme["zero_line_color"],
+    )
+    fig.update_yaxes(
+        color=theme["font_color"],
+        gridcolor=theme["grid_color"],
+        linecolor=theme["axis_color"],
+        zerolinecolor=theme["zero_line_color"],
+    )
+
+    for annotation in fig.layout.annotations:
+        current_font = annotation.font.to_plotly_json() if annotation.font else {}
+        annotation.font = {**current_font, "color": theme["font_color"]}
+        if annotation.bgcolor is None:
+            annotation.bgcolor = theme["annotation_bgcolor"]
+        if annotation.bordercolor is None:
+            annotation.bordercolor = theme["grid_color"]
+
+    for shape in fig.layout.shapes:
+        shape_color = getattr(shape.line, "color", None)
+        if isinstance(shape_color, str) and shape_color.lower() in {
+            "black",
+            "#000",
+            "#000000",
+        }:
+            shape.line.color = theme["zero_line_color"]
+
+    return fig
+
+
+def create_metric_plot(
+    aligned_df: pd.DataFrame,
+    metric: str,
+    theme_settings=None,
+) -> Union[go.Figure, None]:
     """Create line plot from aligned test and reference data for specified metric."""
     if aligned_df is None or aligned_df.empty:
         return None
@@ -27,8 +127,8 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
                 # Plot test data for this start_datetime
                 test_col = f"{metric}_test"
                 ref_col = f"{metric}_ref"
-                elapsed_test_col = f"elapsed_seconds_test"
-                elapsed_ref_col = f"elapsed_seconds_ref"
+                elapsed_test_col = "elapsed_seconds_test"
+                elapsed_ref_col = "elapsed_seconds_ref"
 
                 # Add test line
                 if (
@@ -73,11 +173,13 @@ def create_metric_plot(aligned_df: pd.DataFrame, metric: str) -> Union[go.Figure
         yaxis_title=metric.replace("_", " ").title(),
         hovermode="x unified",
     )
-    return fig
+    return apply_plotly_theme(fig, theme_settings)
 
 
 def create_error_histogram(
-    aligned_df: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame,
+    metric: str,
+    theme_settings=None,
 ) -> Union[go.Figure, None]:
     """Create error distribution histogram from test and reference data."""
     if aligned_df is None or aligned_df.empty:
@@ -104,11 +206,13 @@ def create_error_histogram(
         barmode="overlay",
     )
 
-    return fig
+    return apply_plotly_theme(fig, theme_settings)
 
 
 def create_bland_altman_plot(
-    aligned_df: pd.DataFrame, metric: str
+    aligned_df: pd.DataFrame,
+    metric: str,
+    theme_settings=None,
 ) -> Union[go.Figure, None]:
     """Create Bland-Altman plot from test and reference data."""
     if aligned_df is None or aligned_df.empty:
@@ -167,13 +271,14 @@ def create_bland_altman_plot(
         showlegend=False,
     )
 
-    return fig
+    return apply_plotly_theme(fig, theme_settings)
 
 
 def create_rolling_error_plot(
     aligned_df: pd.DataFrame,
     metric: str,
     window_size: int = 50,
+    theme_settings=None,
 ) -> Union[go.Figure, None]:
     """Create rolling error / time-varying bias plot from test and reference data."""
     if aligned_df is None or aligned_df.empty:
@@ -233,7 +338,7 @@ def create_rolling_error_plot(
     fig.add_hline(
         y=0,
         line_dash="dash",
-        line_color="black",
+        line_color=get_plotly_theme(theme_settings)["zero_line_color"],
         line_width=1,
         annotation_text="Zero bias",
     )
@@ -245,4 +350,4 @@ def create_rolling_error_plot(
         hovermode="x unified",
     )
 
-    return fig
+    return apply_plotly_theme(fig, theme_settings)

@@ -5,6 +5,7 @@ import logging
 # Plotly FigureWidget is needed for interactive callbacks (click/selection)
 import plotly.graph_objects as go
 from shiny import Inputs, reactive
+from shiny.types import SilentException
 from shinywidgets import render_widget
 
 from src.utils import (
@@ -15,6 +16,17 @@ from src.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_plotly_theme_settings(inputs: Inputs):
+    try:
+        input_obj = getattr(inputs, "plotly_theme", None)
+        if input_obj is None:
+            return None
+        value = input_obj()
+        return value if isinstance(value, dict) else None
+    except SilentException:
+        return None
 
 
 def create_visualization_reactives(
@@ -32,7 +44,9 @@ def create_visualization_reactives(
             if aligned_data is None:
                 return None
             fig = create_metric_plot(
-                aligned_data, data_reactives["_get_comparison_metric"]()
+                aligned_data,
+                data_reactives["_get_comparison_metric"](),
+                theme_settings=_get_plotly_theme_settings(inputs),
             )
             if fig is None:
                 return None
@@ -92,7 +106,9 @@ def create_visualization_reactives(
             if aligned_data is None:
                 return None
             return create_error_histogram(
-                aligned_data, data_reactives["_get_comparison_metric"]()
+                aligned_data,
+                data_reactives["_get_comparison_metric"](),
+                theme_settings=_get_plotly_theme_settings(inputs),
             )
 
         return data_reactives["_safe_execute"](_create_histogram, "errorHistogramPlot")
@@ -104,7 +120,9 @@ def create_visualization_reactives(
             if aligned_data is None:
                 return None
             return create_bland_altman_plot(
-                aligned_data, data_reactives["_get_comparison_metric"]()
+                aligned_data,
+                data_reactives["_get_comparison_metric"](),
+                theme_settings=_get_plotly_theme_settings(inputs),
             )
 
         return data_reactives["_safe_execute"](_create_bland_altman, "blandAltmanPlot")
@@ -125,6 +143,7 @@ def create_visualization_reactives(
                 aligned_data,
                 data_reactives["_get_comparison_metric"](),
                 window_size=window_size,
+                theme_settings=_get_plotly_theme_settings(inputs),
             )
 
         return data_reactives["_safe_execute"](

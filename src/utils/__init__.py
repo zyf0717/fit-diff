@@ -43,10 +43,12 @@ from .statistics import (
 
 # Visualization functions
 from .visualizations import (
+    apply_plotly_theme,
     create_bland_altman_plot,
     create_error_histogram,
     create_metric_plot,
     create_rolling_error_plot,
+    get_plotly_theme,
 )
 
 __all__ = [
@@ -75,10 +77,12 @@ __all__ = [
     "get_accuracy_stats",
     "get_agreement_stats",
     # Visualizations
+    "apply_plotly_theme",
     "create_metric_plot",
     "create_error_histogram",
     "create_bland_altman_plot",
     "create_rolling_error_plot",
+    "get_plotly_theme",
     # LLM integration
     "generate_llm_summary_stream",
 ]

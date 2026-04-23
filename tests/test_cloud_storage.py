@@ -270,8 +270,57 @@ def test_create_cloud_metric_range_plot_returns_plotly_figure():
     assert isinstance(figure, go.Figure)
     assert len(figure.data) == 3
     assert figure.data[1].type == "box"
-    assert figure.data[1].fillcolor == "rgba(127, 127, 127, 0.35)"
+    assert figure.data[1].fillcolor == "rgba(33, 37, 41, 0.14)"
     assert figure.data[1].whiskerwidth == 0
+
+
+def test_create_cloud_metric_range_plot_empty_state_uses_theme_and_height():
+    figure = create_cloud_metric_range_plot(
+        pd.DataFrame(),
+        "Mean Bias",
+        theme_settings={
+            "mode": "dark",
+            "font_color": "#f8f9fa",
+        },
+    )
+
+    assert isinstance(figure, go.Figure)
+    assert len(figure.data) == 0
+    assert figure.layout.height == 150
+    assert figure.layout.font.color == "#f8f9fa"
+    assert figure.layout.xaxis.visible is False
+    assert figure.layout.yaxis.visible is False
+
+
+def test_create_cloud_metric_range_plot_applies_dark_theme_colors():
+    results_df = pd.DataFrame(
+        [
+            {
+                "Group": "yifei",
+                "Date": "2025-08-01",
+                "Test File": "test.fit",
+                "Ref File": "ref.fit",
+                "Status": "OK",
+                "Mean Bias": 1.0,
+            }
+        ]
+    )
+
+    figure = create_cloud_metric_range_plot(
+        results_df,
+        "Mean Bias",
+        theme_settings={
+            "mode": "dark",
+            "font_color": "#f8f9fa",
+            "muted_color": "rgba(248, 249, 250, 0.35)",
+            "box_fill_color": "rgba(248, 249, 250, 0.22)",
+            "box_line_color": "rgba(248, 249, 250, 0.42)",
+        },
+    )
+
+    assert figure.layout.font.color == "#f8f9fa"
+    assert figure.data[0].line.color == "rgba(248, 249, 250, 0.35)"
+    assert figure.data[1].fillcolor == "rgba(248, 249, 250, 0.22)"
 
 
 def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():

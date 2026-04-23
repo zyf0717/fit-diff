@@ -5,7 +5,6 @@ Tests for visualization functions.
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import pytest
 
 from src.utils import (
     create_bland_altman_plot,
@@ -63,6 +62,30 @@ class TestCreateMetricPlot:
         result = create_metric_plot(df, "heart_rate")
         assert result is not None  # Should return empty figure
         assert isinstance(result, go.Figure)
+
+    def test_create_metric_plot_applies_theme_settings(self):
+        aligned_df = pd.DataFrame(
+            {
+                "heart_rate_test": [150, 155],
+                "heart_rate_ref": [148, 153],
+                "elapsed_seconds_test": [0, 1],
+                "elapsed_seconds_ref": [0, 1],
+                "start_datetime": ["2025-08-01", "2025-08-01"],
+            }
+        )
+
+        result = create_metric_plot(
+            aligned_df,
+            "heart_rate",
+            theme_settings={
+                "mode": "dark",
+                "font_color": "#f8f9fa",
+                "grid_color": "rgba(248, 249, 250, 0.2)",
+            },
+        )
+
+        assert result.layout.font.color == "#f8f9fa"
+        assert result.layout.xaxis.gridcolor == "rgba(248, 249, 250, 0.2)"
 
 
 class TestCreateErrorHistogram:
@@ -196,3 +219,18 @@ class TestCreateRollingErrorPlot:
         # Verify
         assert result is not None
         assert isinstance(result, go.Figure)
+
+    def test_create_rolling_error_plot_themes_zero_bias_line(self):
+        aligned_df = self.create_aligned_data()
+
+        result = create_rolling_error_plot(
+            aligned_df,
+            "heart_rate",
+            window_size=20,
+            theme_settings={
+                "mode": "dark",
+                "zero_line_color": "rgba(248, 249, 250, 0.55)",
+            },
+        )
+
+        assert result.layout.shapes[0].line.color == "rgba(248, 249, 250, 0.55)"

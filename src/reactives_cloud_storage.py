@@ -12,11 +12,13 @@ from shiny.types import SilentException
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
+    apply_plotly_theme,
     calculate_ccc,
     determine_optimal_shift,
     get_cached_cloud_pair_common_metrics,
     get_cached_cloud_pair_summary,
     get_cloud_cache_db_path,
+    get_plotly_theme,
     init_cloud_cache,
     prepare_data_for_analysis,
     process_file,
@@ -509,14 +511,26 @@ def create_cloud_metric_range_plot(
     results_df: pd.DataFrame,
     metric_name: str,
     benchmark_indicator: float | None = None,
+    theme_settings=None,
 ):
     """Create one horizontal range-strip plot for a single cloud summary metric."""
+
+    def _empty_figure():
+        fig = go.Figure()
+        fig.update_layout(
+            height=150,
+            margin={"l": 40, "r": 20, "t": 10, "b": 40},
+        )
+        fig.update_xaxes(visible=False, fixedrange=True)
+        fig.update_yaxes(visible=False, fixedrange=True)
+        return apply_plotly_theme(fig, theme_settings)
+
     if not isinstance(results_df, pd.DataFrame) or results_df.empty:
-        return go.Figure()
+        return _empty_figure()
 
     plot_df = results_df[results_df["Status"] == "OK"].copy()
     if plot_df.empty:
-        return go.Figure()
+        return _empty_figure()
 
     hover_text = (
         "Group: "
@@ -535,6 +549,7 @@ def create_cloud_metric_range_plot(
     benchmark_value = None
     if benchmark_indicator is not None and np.isfinite(benchmark_indicator):
         benchmark_value = float(benchmark_indicator)
+    theme = get_plotly_theme(theme_settings)
 
     axis_values = finite_values.tolist()
     if benchmark_value is not None:
@@ -563,7 +578,7 @@ def create_cloud_metric_range_plot(
             x=[line_min, line_max],
             y=[0, 0],
             mode="lines",
-            line={"color": "#c7c7c7", "width": 2},
+            line={"color": theme["muted_color"], "width": 2},
             hoverinfo="skip",
             showlegend=False,
         )
@@ -577,8 +592,8 @@ def create_cloud_metric_range_plot(
                 width=0.45,
                 whiskerwidth=0,
                 boxpoints=False,
-                fillcolor="rgba(127, 127, 127, 0.35)",
-                line={"color": "rgba(127, 127, 127, 0.45)", "width": 1},
+                fillcolor=theme["box_fill_color"],
+                line={"color": theme["box_line_color"], "width": 1},
                 hoverinfo="skip",
                 showlegend=False,
             )
@@ -609,8 +624,6 @@ def create_cloud_metric_range_plot(
     fig.update_layout(
         height=150,
         margin={"l": 40, "r": 20, "t": 10, "b": 40},
-        paper_bgcolor="white",
-        plot_bgcolor="white",
     )
     fig.update_yaxes(
         visible=False,
@@ -632,7 +645,7 @@ def create_cloud_metric_range_plot(
         zeroline=False,
         fixedrange=True,
     )
-    return fig
+    return apply_plotly_theme(fig, theme_settings)
 
 
 def _normalize_shift_value(shift_value):
@@ -967,6 +980,7 @@ def create_cloud_storage_reactives(inputs: Inputs):
                 _cloud_pair_results(),
                 metric_name,
                 benchmark_indicator=benchmark_indicator,
+                theme_settings=_safe_input("plotly_theme"),
             )
 
         _plot.__name__ = output_id
