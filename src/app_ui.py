@@ -1,5 +1,6 @@
 import shinyswatch
 from shiny import ui
+from shinywidgets import output_widget
 
 app_ui = ui.page_fluid(
     ui.tags.style(
@@ -72,21 +73,42 @@ app_ui = ui.page_fluid(
         ),
         ui.nav_panel(
             "Cloud Storage",
-            ui.page_fluid(
-                ui.card(
-                    ui.card_header("Manifest Pairs"),
+            ui.page_sidebar(
+                ui.sidebar(
                     ui.output_ui("cloudManifestStatus"),
-                    ui.layout_columns(
-                        ui.output_ui("cloudPairSelector"),
-                        ui.output_ui("cloudMetricSelector"),
-                        col_widths=[8, 4],
-                    ),
+                    ui.output_ui("cloudGroupSelector"),
+                    ui.output_ui("cloudDateRangeSelector"),
+                    ui.output_ui("cloudAutoShiftSelector"),
+                    ui.output_ui("cloudMetricSelector"),
                 ),
+                ui.accordion(
+                    ui.accordion_panel(
+                        "Select File Pairs",
+                        ui.layout_columns(
+                            ui.div(
+                                ui.input_action_button(
+                                    "cloudRefreshAnalysis",
+                                    "Refresh Sections Below",
+                                ),
+                                style="padding-top: 1.75rem;",
+                            ),
+                            ui.output_data_frame("cloudPairSelectionTable"),
+                            col_widths=[2, 10],
+                        ),
+                        value="cloud-pair-selection",
+                    ),
+                    id="cloudPairSelectionAccordion",
+                    open="cloud-pair-selection",
+                    multiple=False,
+                    width="100%",
+                ),
+                ui.hr(),
+                ui.output_ui("cloudMetricRangePlotGrid"),
                 ui.card(
                     ui.card_header("Per-Pair Summary"),
                     ui.output_data_frame("cloudPairSummaryTable"),
                 ),
-            ),
+            )
         ),
         title="Fit File Benchmarking Tool",
     ),
