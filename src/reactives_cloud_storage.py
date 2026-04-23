@@ -1098,7 +1098,7 @@ def create_cloud_storage_reactives(
                     if session is not None:
                         ui.update_navs(
                             "mainNavset",
-                            selected="Local Files",
+                            selected="Benchmarking",
                             session=session,
                         )
 

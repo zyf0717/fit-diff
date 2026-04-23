@@ -10,15 +10,6 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     @render.ui
     def benchmarkingContent():
-        if not file_reactives["_has_active_files"]():
-            return ui.div(
-                ui.p(
-                    "Please upload at least one test file and one reference file, or select a point in Cloud Storage."
-                ),
-                style="text-align: center; margin-top: 50px; color: #666;",
-            )
-
-        preferred_auto_shift_method = file_reactives["_preferred_auto_shift_method"]()
         auto_shift_choices = [
             "None (manual)",
             "Minimize MAE",
@@ -26,13 +17,9 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
             "Maximize Concordance Correlation",
             "Maximize Pearson Correlation",
         ]
-        selected_auto_shift_method = (
-            preferred_auto_shift_method
-            if preferred_auto_shift_method in auto_shift_choices
-            else "None (manual)"
-        )
 
         return ui.div(
+            ui.output_ui("benchmarkingEmptyNotice"),
             ui.layout_columns(
                 ui.output_ui("testFileSelector"),
                 ui.output_ui("refFileSelector"),
@@ -88,9 +75,15 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     "auto_shift_method",
                     "Auto-shift by:",
                     choices=auto_shift_choices,
-                    selected=selected_auto_shift_method,
+                    selected="None (manual)",
                 ),
-                ui.output_ui("shiftSecondsText"),
+                ui.input_text(
+                    id="shift_seconds",
+                    label="Shift test data (seconds):",
+                    value="",
+                    placeholder="Enter seconds",
+                    update_on="blur",
+                ),
                 col_widths=[3, 3, 3, 3],
             ),
             ui.hr(),
@@ -229,6 +222,18 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         )
 
     @render.ui
+    def benchmarkingEmptyNotice():
+        if file_reactives["_has_active_files"]():
+            return None
+
+        return ui.div(
+            ui.p(
+                "Please upload at least one test file and one reference file, or select a point in Cloud Storage."
+            ),
+            style="text-align: center; margin-top: 50px; color: #666;",
+        )
+
+    @render.ui
     def testFileSelector():
         file_names = file_reactives["_active_test_file_names"]()
         if not file_names:
@@ -357,6 +362,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
 
     return {
         "benchmarkingContent": benchmarkingContent,
+        "benchmarkingEmptyNotice": benchmarkingEmptyNotice,
         "testFileSelector": testFileSelector,
         "refFileSelector": refFileSelector,
         "comparisonMetricSelector": comparisonMetricSelector,

@@ -22,6 +22,7 @@ def create_data_processing_reactives(
     metric_plot_y_range=reactive.Value(None),
 ):
     """Create data processing reactive functions."""
+    active_analysis_signature = reactive.Value(None)
 
     def _safe_get_input(input_func, default=None):
         """Safely get input value, handling SilentException when input is not ready."""
@@ -32,6 +33,43 @@ def create_data_processing_reactives(
         except Exception as e:
             logger.warning("Error accessing input: %s, using default: %s", e, default)
             return default
+
+    @reactive.Effect
+    def _reset_analysis_state_for_active_pair():
+        """Clear browser-side analysis state when switching file/pair identity."""
+        signature = (
+            tuple(file_reactives["_active_test_file_names"]()),
+            tuple(file_reactives["_active_ref_file_names"]()),
+            file_reactives["_preferred_comparison_metric"](),
+            file_reactives["_preferred_auto_shift_method"](),
+        )
+        previous_signature = active_analysis_signature.get()
+        if signature == previous_signature:
+            return
+
+        active_analysis_signature.set(signature)
+        metric_plot_x_range.set(None)
+        metric_plot_y_range.set(None)
+
+        preferred_metric = file_reactives["_preferred_comparison_metric"]()
+        preferred_auto_shift_method = file_reactives["_preferred_auto_shift_method"]()
+
+        try:
+            ui.update_select("metric_range", selected="All")
+            ui.update_numeric("metric_range_lower", value=None)
+            ui.update_numeric("metric_range_upper", value=None)
+            ui.update_numeric("time_range_start", value=None)
+            ui.update_numeric("time_range_end", value=None)
+            ui.update_text("shift_seconds", value="")
+            if preferred_metric:
+                ui.update_select("comparison_metric", selected=preferred_metric)
+            if preferred_auto_shift_method:
+                ui.update_select(
+                    "auto_shift_method",
+                    selected=preferred_auto_shift_method,
+                )
+        except Exception as e:
+            logger.debug("Could not reset analysis inputs for active pair: %s", e)
 
     @reactive.Calc
     def _get_test_and_ref_data():
