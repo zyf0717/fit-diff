@@ -529,6 +529,9 @@ def create_cloud_metric_range_plot(
     if not isinstance(results_df, pd.DataFrame) or results_df.empty:
         return _empty_figure()
 
+    if "Status" not in results_df.columns or metric_name not in results_df.columns:
+        return _empty_figure()
+
     plot_df = results_df[results_df["Status"] == "OK"].copy()
     if plot_df.empty:
         return _empty_figure()
@@ -1057,7 +1060,12 @@ def create_cloud_storage_reactives(
             )
 
             figure_widget = go.FigureWidget(figure)
-            plot_df = results_df[results_df["Status"] == "OK"].reset_index(drop=True)
+            if "Status" not in results_df.columns:
+                plot_df = pd.DataFrame()
+            else:
+                plot_df = results_df[results_df["Status"] == "OK"].reset_index(
+                    drop=True
+                )
             marker_trace = next(
                 (
                     trace

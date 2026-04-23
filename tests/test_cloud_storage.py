@@ -292,6 +292,17 @@ def test_create_cloud_metric_range_plot_empty_state_uses_theme_and_height():
     assert figure.layout.yaxis.visible is False
 
 
+def test_create_cloud_metric_range_plot_handles_missing_status_column():
+    figure = create_cloud_metric_range_plot(
+        pd.DataFrame({"Mean Bias": [1.0]}),
+        "Mean Bias",
+    )
+
+    assert isinstance(figure, go.Figure)
+    assert len(figure.data) == 0
+    assert figure.layout.height == 150
+
+
 def test_create_cloud_metric_range_plot_applies_dark_theme_colors():
     results_df = pd.DataFrame(
         [
