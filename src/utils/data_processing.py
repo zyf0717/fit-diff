@@ -2,6 +2,7 @@
 Data processing utilities for FIT and CSV files.
 """
 
+from functools import lru_cache
 import logging
 import math
 from pathlib import Path
@@ -29,6 +30,22 @@ try:
 
 except ImportError:
     S3_AVAILABLE = False
+
+
+@lru_cache(maxsize=None)
+def _get_boto3_session(aws_profile: str = None):
+    """Return a cached boto3 session for the given AWS profile."""
+    if not S3_AVAILABLE:
+        raise ImportError(
+            "boto3 is required for S3 support. Install with: pip install boto3"
+        )
+    return boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
+
+
+@lru_cache(maxsize=None)
+def _get_s3_client(aws_profile: str = None):
+    """Return a cached S3 client for the given AWS profile."""
+    return _get_boto3_session(aws_profile).client("s3")
 
 
 def process_file(file_path: str, aws_profile: str = None) -> dict:
@@ -223,11 +240,7 @@ def _read_s3_fit_file(s3_url: str, aws_profile: str = None) -> dict:
 
     bucket_name, key = url_parts
 
-    # Create S3 client with optional profile
-    session = (
-        boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
-    )
-    s3_client = session.client("s3")
+    s3_client = _get_s3_client(aws_profile)
 
     # Download to temporary file for FIT processing (garmin_fit_sdk needs file path)
     with tempfile.NamedTemporaryFile(suffix=".fit", delete=False) as tmp_file:
@@ -289,12 +302,7 @@ def _process_s3_file(s3_url: str, aws_profile: str = None) -> dict:
             df_dict = _process_fit_messages(messages, original_filename)
         else:  # .csv
             # For CSV files, still need to download to temp file as pandas needs file path
-            session = (
-                boto3.Session(profile_name=aws_profile)
-                if aws_profile
-                else boto3.Session()
-            )
-            s3_client = session.client("s3")
+            s3_client = _get_s3_client(aws_profile)
 
             with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_file:
                 try:
@@ -868,10 +876,7 @@ def read_catalogue():
             return pd.DataFrame()
 
         # S3 read (same pattern as catalogue_update.py)
-        session_obj = (
-            boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
-        )
-        s3_client = session_obj.client("s3")
+        s3_client = _get_s3_client(aws_profile)
         response = s3_client.get_object(Bucket=bucket, Key=csv_key)
         df = pd.read_csv(response["Body"])
         return df

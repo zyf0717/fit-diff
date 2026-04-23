@@ -2,12 +2,14 @@
 Tests for data processing functions.
 """
 
+import io
 from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import src.utils.data_processing as data_processing
 from src.utils import prepare_data_for_analysis, process_file, remove_outliers
 
 
@@ -227,6 +229,73 @@ class TestProcessFit:
             expected_epochs.reset_index(drop=True),
             check_names=False,
         )
+
+    @patch("src.utils.data_processing._process_fit_messages")
+    @patch("src.utils.data_processing._read_fit_file")
+    @patch("src.utils.data_processing.boto3.Session")
+    def test_process_s3_reuses_cached_session_and_client(
+        self, mock_boto3_session, mock_read_fit_file, mock_process_fit_messages
+    ):
+        """S3 FIT reads with the same profile should reuse one boto session/client."""
+        data_processing._get_boto3_session.cache_clear()
+        data_processing._get_s3_client.cache_clear()
+
+        mock_client = Mock()
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+        mock_boto3_session.return_value = mock_session
+        mock_read_fit_file.return_value = {"record_mesgs": [], "session_mesgs": []}
+        mock_process_fit_messages.return_value = {
+            "session": pd.DataFrame([{"filename": "a.fit"}]),
+            "records": pd.DataFrame([{"filename": "a.fit", "timestamp": 1}]),
+            "file_id": pd.DataFrame(),
+            "device_info": pd.DataFrame(),
+        }
+
+        process_file("s3://bucket/a.fit", aws_profile="project-traco")
+        process_file("s3://bucket/b.fit", aws_profile="project-traco")
+
+        assert mock_boto3_session.call_count == 1
+        assert mock_session.client.call_count == 1
+        assert mock_client.download_file.call_count == 2
+
+        data_processing._get_boto3_session.cache_clear()
+        data_processing._get_s3_client.cache_clear()
+
+    @patch("src.utils.data_processing.boto3.Session")
+    def test_read_catalogue_reuses_cached_s3_client(self, mock_boto3_session):
+        """Catalogue reads should use the same cached S3 client helper."""
+        data_processing._get_boto3_session.cache_clear()
+        data_processing._get_s3_client.cache_clear()
+
+        mock_client = Mock()
+        mock_client.get_object.return_value = {
+            "Body": io.BytesIO(b"col\nvalue\n"),
+        }
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+        mock_boto3_session.return_value = mock_session
+
+        with patch.dict(
+            "src.utils.data_processing.os.environ",
+            {
+                "S3_BUCKET": "bucket",
+                "AWS_PROFILE": "project-traco",
+                "CATALOGUE_CSV_KEY": "fit_files/catalogue.csv",
+            },
+            clear=False,
+        ):
+            df = data_processing.read_catalogue()
+
+        assert df["col"].tolist() == ["value"]
+        assert mock_boto3_session.call_count == 1
+        assert mock_session.client.call_count == 1
+        mock_client.get_object.assert_called_once_with(
+            Bucket="bucket", Key="fit_files/catalogue.csv"
+        )
+
+        data_processing._get_boto3_session.cache_clear()
+        data_processing._get_s3_client.cache_clear()
 
 
 class TestPrepareDataForAnalysis:
