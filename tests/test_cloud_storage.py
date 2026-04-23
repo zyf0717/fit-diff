@@ -268,7 +268,10 @@ def test_create_cloud_metric_range_plot_returns_plotly_figure():
     figure = create_cloud_metric_range_plot(results_df, "Mean Bias")
 
     assert isinstance(figure, go.Figure)
-    assert len(figure.data) == 2
+    assert len(figure.data) == 3
+    assert figure.data[1].type == "box"
+    assert figure.data[1].fillcolor == "rgba(127, 127, 127, 0.35)"
+    assert figure.data[1].whiskerwidth == 0
 
 
 def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
@@ -291,8 +294,8 @@ def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
         benchmark_indicator=10.0,
     )
 
-    assert len(figure.data) == 3
-    benchmark_trace = figure.data[2]
+    assert len(figure.data) == 4
+    benchmark_trace = figure.data[3]
     assert list(benchmark_trace.x) == [10.0, 10.0]
     assert benchmark_trace.line.color == "#d62728"
     assert benchmark_trace.line.dash == "dot"

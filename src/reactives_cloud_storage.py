@@ -568,6 +568,21 @@ def create_cloud_metric_range_plot(
             showlegend=False,
         )
     )
+    if not finite_values.empty:
+        fig.add_trace(
+            go.Box(
+                x=finite_values,
+                y=[0] * len(finite_values),
+                orientation="h",
+                width=0.45,
+                whiskerwidth=0,
+                boxpoints=False,
+                fillcolor="rgba(127, 127, 127, 0.35)",
+                line={"color": "rgba(127, 127, 127, 0.45)", "width": 1},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
     fig.add_trace(
         go.Scatter(
             x=metric_values,
