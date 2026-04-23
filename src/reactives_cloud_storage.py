@@ -1068,6 +1068,14 @@ def create_cloud_storage_reactives(
             if cached_row is None:
                 missing_pair_ids.append(row.pair_id)
             else:
+                cached_row = {
+                    **cached_row,
+                    "pair_id": row.pair_id,
+                    "Group": row.group,
+                    "Date": row.date,
+                    "Test File": row.test_filename,
+                    "Ref File": row.ref_filename,
+                }
                 cached_rows_by_pair_id[row.pair_id] = cached_row
 
         computed_rows_by_pair_id = {}
