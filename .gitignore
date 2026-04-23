@@ -221,6 +221,7 @@ cron.sh
 # catalogue files
 local_files_catalogue*.csv
 data_files_manifest*.csv
+fit_files_catalogue*.csv
 
 # .vscode
 .vscode/
