@@ -271,6 +271,57 @@ def test_create_cloud_metric_range_plot_returns_plotly_figure():
     assert len(figure.data) == 2
 
 
+def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
+    results_df = pd.DataFrame(
+        [
+            {
+                "Group": "yifei",
+                "Date": "2025-08-01",
+                "Test File": "test.fit",
+                "Ref File": "ref.fit",
+                "Status": "OK",
+                "Mean Bias": 1.0,
+            }
+        ]
+    )
+
+    figure = create_cloud_metric_range_plot(
+        results_df,
+        "Mean Bias",
+        benchmark_indicator=10.0,
+    )
+
+    assert len(figure.data) == 3
+    benchmark_trace = figure.data[2]
+    assert list(benchmark_trace.x) == [10.0, 10.0]
+    assert benchmark_trace.line.color == "#d62728"
+    assert benchmark_trace.line.dash == "dot"
+
+
+def test_create_cloud_metric_range_plot_pads_axis_when_benchmark_hits_edge():
+    results_df = pd.DataFrame(
+        [
+            {
+                "Group": "yifei",
+                "Date": "2025-08-01",
+                "Test File": "test.fit",
+                "Ref File": "ref.fit",
+                "Status": "OK",
+                "Mean Bias": 1.0,
+            }
+        ]
+    )
+
+    figure = create_cloud_metric_range_plot(
+        results_df,
+        "Mean Bias",
+        benchmark_indicator=10.0,
+    )
+
+    axis_trace = figure.data[0]
+    assert axis_trace.x[1] > 10.0
+
+
 def test_align_pair_data_uses_existing_local_alignment_path():
     test_df = pd.DataFrame(
         {

@@ -54,41 +54,49 @@ RANGE_PLOT_SPECS = [
         "metric_name": "Mean Bias",
         "card_title": "Mean Bias",
         "output_id": "cloudMeanBiasRangePlot",
+        "benchmark_indicator": 10.0,
     },
     {
         "metric_name": "MAE",
         "card_title": "Mean Absolute Error",
         "output_id": "cloudMaeRangePlot",
+        "benchmark_indicator": 10.0,
     },
     {
         "metric_name": "MSE",
         "card_title": "Mean Squared Error",
         "output_id": "cloudMseRangePlot",
+        "benchmark_indicator": 25.0,
     },
     {
         "metric_name": "MAPE (%)",
         "card_title": "Mean Absolute Percentage Error (%)",
         "output_id": "cloudMapeRangePlot",
+        "benchmark_indicator": 5.0,
     },
     {
         "metric_name": "CCC",
         "card_title": "Concordance Correlation Coefficient",
         "output_id": "cloudCccRangePlot",
+        "benchmark_indicator": 0.90,
     },
     {
         "metric_name": "Pearson Corr",
         "card_title": "Pearson Correlation",
         "output_id": "cloudPearsonCorrRangePlot",
+        "benchmark_indicator": 0.90,
     },
     {
         "metric_name": "LoA Lower",
         "card_title": "Lower Limit of Agreement",
         "output_id": "cloudLoaLowerRangePlot",
+        "benchmark_indicator": -10.0,
     },
     {
         "metric_name": "LoA Upper",
         "card_title": "Upper Limit of Agreement",
         "output_id": "cloudLoaUpperRangePlot",
+        "benchmark_indicator": 10.0,
     },
 ]
 
@@ -497,7 +505,11 @@ def build_cloud_pair_results(
     return pd.DataFrame(rows)
 
 
-def create_cloud_metric_range_plot(results_df: pd.DataFrame, metric_name: str):
+def create_cloud_metric_range_plot(
+    results_df: pd.DataFrame,
+    metric_name: str,
+    benchmark_indicator: float | None = None,
+):
     """Create one horizontal range-strip plot for a single cloud summary metric."""
     if not isinstance(results_df, pd.DataFrame) or results_df.empty:
         return go.Figure()
@@ -520,15 +532,29 @@ def create_cloud_metric_range_plot(results_df: pd.DataFrame, metric_name: str):
     metric_values = pd.to_numeric(plot_df[metric_name], errors="coerce")
     finite_values = metric_values[np.isfinite(metric_values)]
 
-    if finite_values.empty:
+    benchmark_value = None
+    if benchmark_indicator is not None and np.isfinite(benchmark_indicator):
+        benchmark_value = float(benchmark_indicator)
+
+    axis_values = finite_values.tolist()
+    if benchmark_value is not None:
+        axis_values.append(benchmark_value)
+
+    if not axis_values:
         line_min, line_max = -1.0, 1.0
     else:
-        line_min = float(finite_values.min())
-        line_max = float(finite_values.max())
+        line_min = float(min(axis_values))
+        line_max = float(max(axis_values))
         if line_min == line_max:
             padding = max(abs(line_min) * 0.1, 1.0)
             line_min -= padding
             line_max += padding
+        if benchmark_value is not None:
+            edge_padding = max((line_max - line_min) * 0.05, 0.05)
+            if np.isclose(benchmark_value, line_min):
+                line_min -= edge_padding
+            if np.isclose(benchmark_value, line_max):
+                line_max += edge_padding
     tick_values = np.linspace(line_min, line_max, 10).tolist()
 
     fig = go.Figure()
@@ -553,6 +579,17 @@ def create_cloud_metric_range_plot(results_df: pd.DataFrame, metric_name: str):
             showlegend=False,
         )
     )
+    if benchmark_value is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=[benchmark_value, benchmark_value],
+                y=[-0.5, 0.5],
+                mode="lines",
+                line={"color": "#d62728", "width": 2, "dash": "dot"},
+                hovertemplate=("Benchmark: %{x:.3f}<extra></extra>"),
+                showlegend=False,
+            )
+        )
 
     fig.update_layout(
         height=150,
@@ -905,16 +942,26 @@ def create_cloud_storage_reactives(inputs: Inputs):
             )
         return ui.layout_columns(*cards, col_widths=[6] * len(cards))
 
-    def _make_cloud_metric_plot_renderer(output_id: str, metric_name: str):
+    def _make_cloud_metric_plot_renderer(
+        output_id: str,
+        metric_name: str,
+        benchmark_indicator: float | None = None,
+    ):
         def _plot():
-            return create_cloud_metric_range_plot(_cloud_pair_results(), metric_name)
+            return create_cloud_metric_range_plot(
+                _cloud_pair_results(),
+                metric_name,
+                benchmark_indicator=benchmark_indicator,
+            )
 
         _plot.__name__ = output_id
         return render_widget(_plot)
 
     cloud_metric_plot_renderers = {
         spec["output_id"]: _make_cloud_metric_plot_renderer(
-            spec["output_id"], spec["metric_name"]
+            spec["output_id"],
+            spec["metric_name"],
+            benchmark_indicator=spec["benchmark_indicator"],
         )
         for spec in RANGE_PLOT_SPECS
     }
