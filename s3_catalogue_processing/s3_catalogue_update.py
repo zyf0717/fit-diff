@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import aioboto3
 import pandas as pd
@@ -145,7 +145,7 @@ def _relative_path_from_key(key, prefix):
 
 
 def _build_path_tags(relative_path):
-    parts = list(Path(relative_path).parts[:-1])
+    parts = list(PurePosixPath(relative_path).parts[:-1])
     candidates = []
     for part in parts:
         candidates.extend(_tokenize_path_part(part))
@@ -154,10 +154,10 @@ def _build_path_tags(relative_path):
 
 def _build_file_row(file_info, prefix, date_pattern):
     key = file_info["key"]
-    filename = Path(key).name
+    filename = PurePosixPath(key).name
     relative_path = _relative_path_from_key(key, prefix)
-    pairing_group = str(Path(relative_path).parent)
-    filename_stem = Path(filename).stem.lower()
+    pairing_group = str(PurePosixPath(relative_path).parent)
+    filename_stem = PurePosixPath(filename).stem.lower()
 
     path_tags = _build_path_tags(relative_path)
     filename_tags = _match_map_tags([filename_stem], FILENAME_TAG_KEYWORDS_MAP)

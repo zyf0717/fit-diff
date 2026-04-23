@@ -12,7 +12,9 @@ from src.reactives_cloud_storage import (
     get_cloud_manifest_date_bounds,
     get_cloud_manifest_groups,
     get_selected_cloud_pair_ids,
+    load_cached_common_metrics,
 )
+from src.utils.cloud_cache import put_cached_cloud_pair_common_metrics
 
 
 def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
@@ -27,6 +29,7 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
                 "paired_overlap_pct": 0.875,
                 "filename": "test.fit",
                 "device_type": "test",
+                "tags": "pilot|pacer",
                 "s3_key": "fit_files/yifei/test.fit",
             },
             {
@@ -37,6 +40,7 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
                 "date": "2025-08-04",
                 "filename": "ref.fit",
                 "device_type": "ref",
+                "tags": "pilot|h10",
                 "s3_key": "fit_files/yifei/ref.fit",
             },
         ]
@@ -51,16 +55,19 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
     assert row["test_s3_key"] == "fit_files/yifei/test.fit"
     assert row["ref_s3_key"] == "fit_files/yifei/ref.fit"
     assert row["paired_overlap_pct"] == 0.875
+    assert row["group"] == "pilot"
+    assert row["pair_id"].startswith("pilot:1:")
+    assert row["pair_label"].startswith("pilot | 2025-08-04 | ")
     assert "test.fit <> ref.fit" in row["pair_label"]
 
 
 def test_get_cloud_manifest_groups_returns_sorted_unique_groups():
     pair_df = pd.DataFrame(
         [
-            {"pairing_group": "zoe"},
-            {"pairing_group": "amy"},
-            {"pairing_group": "zoe"},
-            {"pairing_group": None},
+            {"group": "zoe", "pairing_group": "folder/a"},
+            {"group": "amy", "pairing_group": "folder/b"},
+            {"group": "zoe", "pairing_group": "folder/c"},
+            {"group": None, "pairing_group": "folder/d"},
         ]
     )
 
@@ -75,6 +82,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
             {
                 "pair_id": "p1",
                 "pair_label": "yifei 2025-08-01",
+                "group": "pilot",
                 "pairing_group": "yifei",
                 "pair_index": 1,
                 "date": "2025-08-01",
@@ -88,6 +96,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
             {
                 "pair_id": "p2",
                 "pair_label": "yifei 2025-08-03",
+                "group": "pilot",
                 "pairing_group": "yifei",
                 "pair_index": 2,
                 "date": "2025-08-03",
@@ -101,6 +110,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
             {
                 "pair_id": "p3",
                 "pair_label": "amy 2025-08-02",
+                "group": "control",
                 "pairing_group": "amy",
                 "pair_index": 1,
                 "date": "2025-08-02",
@@ -116,7 +126,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
 
     filtered_df = filter_cloud_pair_manifest(
         pair_df,
-        selected_groups=["yifei"],
+        selected_groups=["pilot"],
         start_date="2025-08-02",
         end_date="2025-08-03",
     )
@@ -168,6 +178,7 @@ def test_build_cloud_pair_selection_table_returns_sortable_display_columns():
         [
             {
                 "pair_id": "p1",
+                "group": "pilot",
                 "pairing_group": "yifei",
                 "date": "2025-08-01",
                 "paired_overlap_pct": 0.723456,
@@ -187,7 +198,7 @@ def test_build_cloud_pair_selection_table_returns_sortable_display_columns():
         "Overlap (%)",
     ]
     assert selection_df.iloc[0].to_dict() == {
-        "Group": "yifei",
+        "Group": "pilot",
         "Date": "2025-08-01",
         "Test File": "test.fit",
         "Ref File": "ref.fit",
@@ -209,10 +220,31 @@ def test_get_selected_cloud_pair_ids_maps_selected_rows_to_pair_ids():
     assert selected_pair_ids == ["p3", "p1"]
 
 
+def test_load_cached_common_metrics_does_not_require_uncached_pairs(tmp_path):
+    pair_df = pd.DataFrame(
+        [
+            {"pair_id": "p1", "test_etag": "t1", "ref_etag": "r1"},
+            {"pair_id": "p2", "test_etag": "t2", "ref_etag": "r2"},
+        ]
+    )
+    db_path = tmp_path / "cloud_cache.sqlite3"
+    put_cached_cloud_pair_common_metrics(
+        test_etag="t1",
+        ref_etag="r1",
+        common_metrics=["heart_rate", "cadence"],
+        db_path=db_path,
+    )
+
+    metrics = load_cached_common_metrics(pair_df, ["p1", "p2"], db_path=db_path)
+
+    assert metrics == ["cadence", "heart_rate"]
+
+
 def test_build_cloud_pair_results_returns_summary_rows():
     pair_data = {
         "p1": {
             "meta": {
+                "group": "pilot",
                 "pairing_group": "yifei",
                 "date": "2025-08-01",
                 "test_filename": "test.fit",
@@ -239,6 +271,7 @@ def test_build_cloud_pair_results_returns_summary_rows():
     result_df = build_cloud_pair_results(pair_data, "heart_rate", "Minimize MAE")
 
     assert result_df.iloc[0]["Status"] == "OK"
+    assert result_df.iloc[0]["Group"] == "pilot"
     assert result_df.iloc[0]["Metric"] == "heart_rate"
     assert result_df.iloc[0]["Mean Bias"] == 1.0
     assert result_df.iloc[0]["MAE"] == 1.0

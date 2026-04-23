@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from s3_catalogue_processing.s3_catalogue_update import build_file_dataframe
+
+
 def _make_processor(timestamp_map):
     def fake_processor(s3_url, aws_profile=None):
         timestamps = timestamp_map[s3_url]
@@ -65,6 +67,76 @@ def test_build_file_dataframe_includes_time_bounds_and_simple_pair():
     assert list(df["duration_seconds"]) == [60, 60]
     assert list(df["paired_overlap_seconds"]) == [40, 40]
     assert list(df["paired_overlap_pct"]) == [40 / 60, 40 / 60]
+
+
+def test_build_file_dataframe_pairs_nested_files_within_each_subfolder():
+    files = [
+        {
+            "key": "fit_files/yifei/session_a/20250910_watchOS_h10.fit",
+            "etag": "ref-a",
+            "size_mb": 0.1,
+            "last_modified": datetime(2025, 9, 10, 3, 0, tzinfo=timezone.utc),
+        },
+        {
+            "key": "fit_files/yifei/session_a/20250910_polar_pacer.fit",
+            "etag": "test-a",
+            "size_mb": 0.1,
+            "last_modified": datetime(2025, 9, 10, 3, 5, tzinfo=timezone.utc),
+        },
+        {
+            "key": "fit_files/yifei/session_b/20250910_watchOS_h10.fit",
+            "etag": "ref-b",
+            "size_mb": 0.1,
+            "last_modified": datetime(2025, 9, 10, 3, 0, tzinfo=timezone.utc),
+        },
+        {
+            "key": "fit_files/yifei/session_b/20250910_polar_pacer.fit",
+            "etag": "test-b",
+            "size_mb": 0.1,
+            "last_modified": datetime(2025, 9, 10, 3, 5, tzinfo=timezone.utc),
+        },
+    ]
+    processor = _make_processor(
+        {
+            "s3://bucket/fit_files/yifei/session_a/20250910_watchOS_h10.fit": [
+                100,
+                130,
+                160,
+            ],
+            "s3://bucket/fit_files/yifei/session_a/20250910_polar_pacer.fit": [
+                120,
+                150,
+                180,
+            ],
+            "s3://bucket/fit_files/yifei/session_b/20250910_watchOS_h10.fit": [
+                100,
+                130,
+                160,
+            ],
+            "s3://bucket/fit_files/yifei/session_b/20250910_polar_pacer.fit": [
+                120,
+                150,
+                180,
+            ],
+        }
+    )
+
+    df = build_file_dataframe(
+        files,
+        prefix="fit_files/",
+        bucket_name="bucket",
+        file_processor=processor,
+    )
+
+    by_etag = df.set_index("etag")
+    assert by_etag.loc["ref-a", "pairing_group"] == "yifei/session_a"
+    assert by_etag.loc["test-a", "pairing_group"] == "yifei/session_a"
+    assert by_etag.loc["ref-b", "pairing_group"] == "yifei/session_b"
+    assert by_etag.loc["test-b", "pairing_group"] == "yifei/session_b"
+    assert by_etag.loc["ref-a", "paired_etag"] == "test-a"
+    assert by_etag.loc["test-a", "paired_etag"] == "ref-a"
+    assert by_etag.loc["ref-b", "paired_etag"] == "test-b"
+    assert by_etag.loc["test-b", "paired_etag"] == "ref-b"
 
 
 def test_build_file_dataframe_does_not_pair_non_overlapping_files():

@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 PAIR_MANIFEST_COLUMNS = [
     "pair_id",
     "pair_label",
+    "group",
     "pairing_group",
     "pair_index",
     "date",
@@ -125,13 +126,30 @@ def _coerce_input_date(value):
     return parsed.date()
 
 
+def _first_tag(tags_value):
+    """Return the first non-empty pipe-delimited tag from a catalogue row."""
+    if tags_value is None or pd.isna(tags_value):
+        return None
+    for tag in str(tags_value).split("|"):
+        normalized = tag.strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _group_column(pair_df: pd.DataFrame) -> pd.Series:
+    if "group" in pair_df.columns:
+        return pair_df["group"]
+    return pair_df["pairing_group"]
+
+
 def get_cloud_manifest_groups(pair_df: pd.DataFrame) -> list[str]:
-    """Return available pairing groups from the manifest."""
+    """Return available first-tag groups from the manifest."""
     if not isinstance(pair_df, pd.DataFrame) or pair_df.empty:
         return []
     return sorted(
         group
-        for group in pair_df["pairing_group"].dropna().astype(str).unique().tolist()
+        for group in _group_column(pair_df).dropna().astype(str).unique().tolist()
         if group
     )
 
@@ -147,13 +165,15 @@ def filter_cloud_pair_manifest(
         return pd.DataFrame(columns=PAIR_MANIFEST_COLUMNS)
 
     filtered_df = pair_df.copy()
+    if "group" not in filtered_df.columns:
+        filtered_df["group"] = filtered_df["pairing_group"]
     filtered_df["_pair_date"] = filtered_df["date"].apply(_coerce_manifest_date)
 
     if selected_groups is not None:
         groups = [str(group) for group in selected_groups if group]
         if not groups:
             return pd.DataFrame(columns=PAIR_MANIFEST_COLUMNS)
-        filtered_df = filtered_df[filtered_df["pairing_group"].astype(str).isin(groups)]
+        filtered_df = filtered_df[_group_column(filtered_df).astype(str).isin(groups)]
 
     start = _coerce_input_date(start_date)
     if start is not None:
@@ -170,7 +190,7 @@ def filter_cloud_pair_manifest(
     return (
         filtered_df.drop(columns="_pair_date")
         .sort_values(
-            ["pairing_group", "date", "pair_index", "test_filename", "ref_filename"]
+            ["group", "date", "pair_index", "test_filename", "ref_filename"]
         )
         .reset_index(drop=True)
     )
@@ -237,16 +257,21 @@ def build_cloud_pair_manifest(manifest_df: pd.DataFrame) -> pd.DataFrame:
             "s3_key": "test_s3_key",
         }
     )
+    if "tags" in pair_df.columns:
+        pair_df["group"] = pair_df["tags"].apply(_first_tag)
+    else:
+        pair_df["group"] = None
+    pair_df["group"] = pair_df["group"].fillna(pair_df["pairing_group"])
     pair_df["pair_id"] = pair_df.apply(
         lambda row: (
-            f"{row['pairing_group']}:{int(row['pair_index']) if pd.notna(row['pair_index']) else 'na'}:"
+            f"{row['group']}:{int(row['pair_index']) if pd.notna(row['pair_index']) else 'na'}:"
             f"{row['test_etag']}:{row['ref_etag']}"
         ),
         axis=1,
     )
     pair_df["pair_label"] = pair_df.apply(
         lambda row: (
-            f"{row['pairing_group']} | {row['date']} | "
+            f"{row['group']} | {row['date']} | "
             f"{row['test_filename']} <> {row['ref_filename']}"
         ),
         axis=1,
@@ -254,7 +279,7 @@ def build_cloud_pair_manifest(manifest_df: pd.DataFrame) -> pd.DataFrame:
     if "paired_overlap_pct" not in pair_df.columns:
         pair_df["paired_overlap_pct"] = np.nan
     pair_df = pair_df.loc[:, PAIR_MANIFEST_COLUMNS].sort_values(
-        ["pairing_group", "date", "pair_index", "test_filename", "ref_filename"]
+        ["group", "date", "pair_index", "test_filename", "ref_filename"]
     )
     pair_df = pair_df.reset_index(drop=True)
     return pair_df
@@ -272,7 +297,7 @@ def build_cloud_pair_selection_table(pair_df: pd.DataFrame) -> pd.DataFrame:
     )
     selection_df = pd.DataFrame(
         {
-            "Group": pair_df["pairing_group"],
+            "Group": _group_column(pair_df),
             "Date": pair_df["date"],
             "Test File": pair_df["test_filename"],
             "Ref File": pair_df["ref_filename"],
@@ -448,6 +473,35 @@ def load_cached_or_compute_common_metrics(
     return sorted(set.intersection(*metric_sets))
 
 
+def load_cached_common_metrics(
+    pair_df: pd.DataFrame,
+    selected_pair_ids: list[str],
+    db_path,
+) -> list[str]:
+    """Return shared common metrics for selected pairs using only local cache."""
+    if not isinstance(pair_df, pd.DataFrame) or pair_df.empty or not selected_pair_ids:
+        return []
+
+    selected_pairs_df = pair_df[pair_df["pair_id"].isin(selected_pair_ids)].copy()
+    if selected_pairs_df.empty:
+        return []
+
+    metric_sets = []
+    for row in selected_pairs_df.itertuples(index=False):
+        cached_metrics = get_cached_cloud_pair_common_metrics(
+            test_etag=row.test_etag,
+            ref_etag=row.ref_etag,
+            db_path=db_path,
+        )
+        if cached_metrics is None:
+            continue
+        metric_sets.append(set(cached_metrics))
+
+    if not metric_sets:
+        return []
+    return sorted(set.intersection(*metric_sets))
+
+
 def build_cloud_pair_result_row(
     pair_id: str,
     entry: dict,
@@ -458,7 +512,7 @@ def build_cloud_pair_result_row(
     meta = entry["meta"]
     base_row = {
         "pair_id": pair_id,
-        "Group": meta["pairing_group"],
+        "Group": meta.get("group", meta["pairing_group"]),
         "Date": meta["date"],
         "Test File": meta["test_filename"],
         "Ref File": meta["ref_filename"],
@@ -913,11 +967,9 @@ def create_cloud_storage_reactives(
 
     @reactive.Calc
     def _cloud_common_metrics():
-        return load_cached_or_compute_common_metrics(
+        return load_cached_common_metrics(
             _filtered_cloud_manifest(),
             _selected_cloud_pair_ids(),
-            bucket_name,
-            aws_profile,
             cloud_cache_db_path,
         )
 
