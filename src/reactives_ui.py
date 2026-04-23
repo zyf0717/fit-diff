@@ -235,7 +235,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         }
         return ui.input_selectize(
             "selected_test_files",
-            "Select test files to use:",
+            "Select test file(s) to use:",
             choices=file_choices,
             selected=list(file_choices.keys()),  # Default to all selected
             multiple=True,
@@ -250,7 +250,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         file_choices = {file_info["name"]: file_info["name"] for file_info in ref_files}
         return ui.input_selectize(
             "selected_ref_files",
-            "Select reference files to use:",
+            "Select reference file(s) to use:",
             choices=file_choices,
             selected=list(file_choices.keys()),  # Default to all selected
             multiple=True,

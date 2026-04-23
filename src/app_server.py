@@ -3,6 +3,7 @@ import logging
 import shinyswatch
 from shiny import Inputs, Outputs, Session, reactive
 
+from src.reactives_cloud_storage import create_cloud_storage_reactives
 from src.reactives_data_processing import create_data_processing_reactives
 from src.reactives_file_handling import create_file_handling_reactives
 from src.reactives_statistics import create_statistics_reactives
@@ -29,6 +30,7 @@ def server(inputs: Inputs, output: Outputs, session: Session):
     statistics_reactives = create_statistics_reactives(
         inputs, file_reactives, data_reactives
     )
+    cloud_storage_reactives = create_cloud_storage_reactives(inputs)
 
     # Enable dynamic theme switching
     shinyswatch.theme_picker_server()

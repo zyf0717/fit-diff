@@ -41,7 +41,7 @@ app_ui = ui.page_fluid(
     ),
     ui.navset_bar(
         ui.nav_panel(
-            "Benchmarking",
+            "Local Files",
             ui.page_sidebar(
                 ui.sidebar(
                     ui.tags.script(
@@ -70,7 +70,25 @@ app_ui = ui.page_fluid(
                 ui.output_ui("benchmarkingContent"),
             ),
         ),
-        title="",
+        ui.nav_panel(
+            "Cloud Storage",
+            ui.page_fluid(
+                ui.card(
+                    ui.card_header("Manifest Pairs"),
+                    ui.output_ui("cloudManifestStatus"),
+                    ui.layout_columns(
+                        ui.output_ui("cloudPairSelector"),
+                        ui.output_ui("cloudMetricSelector"),
+                        col_widths=[8, 4],
+                    ),
+                ),
+                ui.card(
+                    ui.card_header("Per-Pair Summary"),
+                    ui.output_data_frame("cloudPairSummaryTable"),
+                ),
+            ),
+        ),
+        title="Fit File Benchmarking Tool",
     ),
     theme=shinyswatch.theme.flatly,
 )
