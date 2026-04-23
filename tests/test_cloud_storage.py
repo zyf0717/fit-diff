@@ -64,16 +64,87 @@ def test_build_cloud_pair_manifest_returns_one_row_per_test_ref_pair():
 def test_get_cloud_manifest_groups_returns_sorted_unique_groups():
     pair_df = pd.DataFrame(
         [
-            {"group": "zoe", "pairing_group": "folder/a"},
-            {"group": "amy", "pairing_group": "folder/b"},
-            {"group": "zoe", "pairing_group": "folder/c"},
-            {"group": None, "pairing_group": "folder/d"},
+            {"group": "zoe", "tags": "zoe|pacer", "pairing_group": "folder/a"},
+            {"group": "amy", "tags": "amy|h10", "pairing_group": "folder/b"},
+            {"group": "zoe", "tags": "zoe|eq02", "pairing_group": "folder/c"},
+            {"group": None, "tags": "pacer|h10", "pairing_group": "folder/d"},
         ]
     )
 
     groups = get_cloud_manifest_groups(pair_df)
 
     assert groups == ["amy", "zoe"]
+
+
+def test_cloud_manifest_group_filters_use_non_device_tags_for_future_variants():
+    manifest_df = pd.DataFrame(
+        [
+            {
+                "etag": "test-vo2",
+                "paired_etag": "ref-vo2",
+                "pairing_group": "nexgen_vo2max/nxg120",
+                "pair_index": 1,
+                "date": "2026-04-15",
+                "paired_overlap_pct": 0.8,
+                "filename": "vo2_test.fit",
+                "device_type": "test",
+                "tags": "nexgen|vo2max|pacer",
+                "s3_key": "fit_files/nexgen_vo2max/nxg120/vo2_test.fit",
+            },
+            {
+                "etag": "ref-vo2",
+                "paired_etag": "test-vo2",
+                "pairing_group": "nexgen_vo2max/nxg120",
+                "pair_index": 1,
+                "date": "2026-04-15",
+                "filename": "vo2_ref.fit",
+                "device_type": "ref",
+                "tags": "nexgen|vo2max|h10",
+                "s3_key": "fit_files/nexgen_vo2max/nxg120/vo2_ref.fit",
+            },
+            {
+                "etag": "test-crown",
+                "paired_etag": "ref-crown",
+                "pairing_group": "nexgen_crown/nxg999",
+                "pair_index": 1,
+                "date": "2026-04-16",
+                "paired_overlap_pct": 0.9,
+                "filename": "crown_test.fit",
+                "device_type": "test",
+                "tags": "nexgen|crown|pacer",
+                "s3_key": "fit_files/nexgen_crown/nxg999/crown_test.fit",
+            },
+            {
+                "etag": "ref-crown",
+                "paired_etag": "test-crown",
+                "pairing_group": "nexgen_crown/nxg999",
+                "pair_index": 1,
+                "date": "2026-04-16",
+                "filename": "crown_ref.fit",
+                "device_type": "ref",
+                "tags": "nexgen|crown|h10",
+                "s3_key": "fit_files/nexgen_crown/nxg999/crown_ref.fit",
+            },
+        ]
+    )
+
+    pair_df = build_cloud_pair_manifest(manifest_df)
+
+    assert get_cloud_manifest_groups(pair_df) == ["crown", "nexgen", "vo2max"]
+    groups_by_filename = dict(zip(pair_df["test_filename"], pair_df["group"]))
+    assert groups_by_filename == {
+        "vo2_test.fit": "nexgen|vo2max",
+        "crown_test.fit": "nexgen|crown",
+    }
+    assert filter_cloud_pair_manifest(pair_df, selected_groups=["nexgen"])[
+        "pair_id"
+    ].tolist() == pair_df["pair_id"].tolist()
+    vo2_pair_id = pair_df.loc[
+        pair_df["test_filename"] == "vo2_test.fit", "pair_id"
+    ].iloc[0]
+    assert filter_cloud_pair_manifest(pair_df, selected_groups=["vo2max"])[
+        "pair_id"
+    ].tolist() == [vo2_pair_id]
 
 
 def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
@@ -83,6 +154,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
                 "pair_id": "p1",
                 "pair_label": "yifei 2025-08-01",
                 "group": "pilot",
+                "tags": "pilot",
                 "pairing_group": "yifei",
                 "pair_index": 1,
                 "date": "2025-08-01",
@@ -97,6 +169,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
                 "pair_id": "p2",
                 "pair_label": "yifei 2025-08-03",
                 "group": "pilot",
+                "tags": "pilot",
                 "pairing_group": "yifei",
                 "pair_index": 2,
                 "date": "2025-08-03",
@@ -111,6 +184,7 @@ def test_filter_cloud_pair_manifest_filters_by_group_and_date_range():
                 "pair_id": "p3",
                 "pair_label": "amy 2025-08-02",
                 "group": "control",
+                "tags": "control",
                 "pairing_group": "amy",
                 "pair_index": 1,
                 "date": "2025-08-02",
