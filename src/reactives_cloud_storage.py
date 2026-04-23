@@ -854,6 +854,7 @@ def create_cloud_storage_reactives(
     init_cloud_cache(cloud_cache_db_path)
     cloud_analysis_request = reactive.Value(None)
     selected_cloud_plot_pair_id = reactive.Value(None)
+    date_filter_state = {"group_signature": None}
 
     def _safe_input(input_name, default=None):
         try:
@@ -886,11 +887,22 @@ def create_cloud_storage_reactives(
             multiple=True,
         )
 
+    def _selected_cloud_groups():
+        selected_groups = _safe_input("selected_cloud_groups")
+        if selected_groups is None:
+            return get_cloud_manifest_groups(_cloud_manifest())
+        return selected_groups
+
+    def _group_signature(selected_groups) -> tuple[str, ...]:
+        return tuple(sorted(str(group) for group in selected_groups if group))
+
     @render.ui
     def cloudDateRangeSelector():
+        selected_groups = _selected_cloud_groups()
+        group_signature = _group_signature(selected_groups)
         group_filtered_df = filter_cloud_pair_manifest(
             _cloud_manifest(),
-            selected_groups=_safe_input("selected_cloud_groups"),
+            selected_groups=selected_groups,
         )
         start_date, end_date = get_cloud_manifest_date_bounds(group_filtered_df)
         if start_date is None or end_date is None:
@@ -899,9 +911,16 @@ def create_cloud_storage_reactives(
         selected_range = _safe_input("selected_cloud_date_range")
         selected_start = start_date
         selected_end = end_date
-        if isinstance(selected_range, (list, tuple)) and len(selected_range) == 2:
+        if date_filter_state["group_signature"] != group_signature:
+            date_filter_state["group_signature"] = group_signature
+        elif isinstance(selected_range, (list, tuple)) and len(selected_range) == 2:
             selected_start = _coerce_input_date(selected_range[0]) or start_date
             selected_end = _coerce_input_date(selected_range[1]) or end_date
+            selected_start = min(max(selected_start, start_date), end_date)
+            selected_end = min(max(selected_end, start_date), end_date)
+            if selected_start > selected_end:
+                selected_start = start_date
+                selected_end = end_date
 
         return ui.input_date_range(
             "selected_cloud_date_range",
@@ -914,20 +933,21 @@ def create_cloud_storage_reactives(
 
     @reactive.Calc
     def _filtered_cloud_manifest():
+        selected_groups = _selected_cloud_groups()
+        group_signature = _group_signature(selected_groups)
         selected_range = _safe_input("selected_cloud_date_range")
-        start_date = (
-            selected_range[0]
-            if isinstance(selected_range, (list, tuple)) and len(selected_range) == 2
-            else None
-        )
-        end_date = (
-            selected_range[1]
-            if isinstance(selected_range, (list, tuple)) and len(selected_range) == 2
-            else None
-        )
+        start_date = None
+        end_date = None
+        if (
+            date_filter_state["group_signature"] == group_signature
+            and isinstance(selected_range, (list, tuple))
+            and len(selected_range) == 2
+        ):
+            start_date = selected_range[0]
+            end_date = selected_range[1]
         return filter_cloud_pair_manifest(
             _cloud_manifest(),
-            selected_groups=_safe_input("selected_cloud_groups"),
+            selected_groups=selected_groups,
             start_date=start_date,
             end_date=end_date,
         )
