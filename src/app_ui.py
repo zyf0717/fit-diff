@@ -142,7 +142,7 @@ app_ui = ui.page_fluid(
     ui.navset_bar(
         ui.nav_panel(
             "Benchmarking",
-            ui.page_sidebar(
+            ui.layout_sidebar(
                 ui.sidebar(
                     ui.tags.script(
                         """
@@ -172,7 +172,7 @@ app_ui = ui.page_fluid(
         ),
         ui.nav_panel(
             "Batch Analysis",
-            ui.page_sidebar(
+            ui.layout_sidebar(
                 ui.sidebar(
                     ui.output_ui("cloudGroupSelector"),
                     ui.output_ui("cloudDateRangeSelector"),
