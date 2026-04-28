@@ -24,13 +24,13 @@ RANGE_PLOT_SPECS = [
         "metric_name": "MSE",
         "card_title": "Mean Squared Error",
         "output_id": "cloudMseRangePlot",
-        "benchmark_indicator": 25.0,
+        "benchmark_indicator": None,
     },
     {
         "metric_name": "MAPE (%)",
         "card_title": "Mean Absolute Percentage Error (%)",
         "output_id": "cloudMapeRangePlot",
-        "benchmark_indicator": 5.0,
+        "benchmark_indicator": 10.0,
     },
     {
         "metric_name": "CCC",

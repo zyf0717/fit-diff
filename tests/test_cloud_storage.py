@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from src.reactives_cloud_storage import (
+    RANGE_PLOT_SPECS,
     align_pair_data,
     build_cloud_pair_manifest,
     build_cloud_pair_results,
@@ -502,6 +503,36 @@ def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
     assert list(benchmark_trace.x) == [10.0, 10.0]
     assert benchmark_trace.line.color == "#d62728"
     assert benchmark_trace.line.dash == "dot"
+
+
+def test_cloud_metric_range_plot_specs_set_mape_limit_and_remove_mse_limit():
+    specs_by_metric = {spec["metric_name"]: spec for spec in RANGE_PLOT_SPECS}
+
+    assert specs_by_metric["MAPE (%)"]["benchmark_indicator"] == 10.0
+    assert specs_by_metric["MSE"]["benchmark_indicator"] is None
+
+
+def test_create_cloud_metric_range_plot_omits_benchmark_line_when_unconfigured():
+    results_df = pd.DataFrame(
+        [
+            {
+                "Group": "yifei",
+                "Date": "2025-08-01",
+                "Test File": "test.fit",
+                "Ref File": "ref.fit",
+                "Status": "OK",
+                "MSE": 1.0,
+            }
+        ]
+    )
+
+    figure = create_cloud_metric_range_plot(
+        results_df,
+        "MSE",
+        benchmark_indicator=None,
+    )
+
+    assert len(figure.data) == 3
 
 
 def test_create_cloud_metric_range_plot_pads_axis_when_benchmark_hits_edge():

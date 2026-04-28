@@ -17,6 +17,7 @@ from src.utils import (
 )
 from src.utils.cloud_analysis import (
     align_pair_data,
+    build_cloud_pair_result_row,
     build_cloud_pair_results,
     compute_pair_summary,
     load_cached_common_metrics,
