@@ -225,3 +225,5 @@ fit_files_catalogue*.csv
 
 # .vscode
 .vscode/
+
+.playwright-cli/

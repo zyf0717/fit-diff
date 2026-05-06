@@ -2,8 +2,7 @@ import shinyswatch
 from shiny import ui
 
 app_ui = ui.page_fluid(
-    ui.tags.style(
-        """
+    ui.tags.style("""
         /* Make the sidebar independently scrollable */
         .sidebar {
             max-height: 100vh;
@@ -12,10 +11,22 @@ app_ui = ui.page_fluid(
             top: 0;
             background: inherit;
         }
-        """
-    ),
-    ui.tags.script(
-        """
+
+        .cloud-pair-actions {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            min-height: 100%;
+        }
+
+        .cloud-pair-table-wrap {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+        """),
+    ui.tags.script("""
         Shiny.addCustomMessageHandler("toggle_disabled", function(msg) {
         var el = document.getElementById(msg.id);
         if (!el) return;
@@ -37,10 +48,8 @@ app_ui = ui.page_fluid(
         el.style.opacity = msg.disabled ? "0.6" : "1.0";
         el.style.backgroundColor = msg.disabled ? "#f0f0f0" : "";
         });
-        """
-    ),
-    ui.tags.script(
-        """
+        """),
+    ui.tags.script("""
         (function() {
         function parseColor(color) {
             if (!color) return null;
@@ -137,20 +146,17 @@ app_ui = ui.page_fluid(
             document.addEventListener("change", queuePlotlyThemePush, true);
         });
         })();
-        """
-    ),
+        """),
     ui.navset_bar(
         ui.nav_panel(
             "Benchmarking",
             ui.layout_sidebar(
                 ui.sidebar(
-                    ui.tags.script(
-                        """
+                    ui.tags.script("""
                 Shiny.addCustomMessageHandler("logout", function(_) {
                     window.location.href = "https://fit-diff.paperclips.dev/cdn-cgi/access/logout";
                 });
-                """
-                    ),
+                """),
                     ui.input_file(
                         "testFileUpload",
                         "Upload test file(s)",
@@ -185,12 +191,19 @@ app_ui = ui.page_fluid(
                         ui.layout_columns(
                             ui.div(
                                 ui.input_action_button(
+                                    "cloudSelectAllRows",
+                                    "Select All Rows",
+                                ),
+                                ui.input_action_button(
                                     "cloudRefreshAnalysis",
                                     "Refresh Sections Below",
                                 ),
-                                style="padding-top: 1.75rem;",
+                                class_="cloud-pair-actions",
                             ),
-                            ui.output_data_frame("cloudPairSelectionTable"),
+                            ui.div(
+                                ui.output_data_frame("cloudPairSelectionTable"),
+                                class_="cloud-pair-table-wrap",
+                            ),
                             col_widths=[2, 10],
                         ),
                         value="cloud-pair-selection",

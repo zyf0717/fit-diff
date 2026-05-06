@@ -267,10 +267,12 @@ class TestProcessFit:
         """Catalogue reads should use the same cached S3 client helper."""
         data_processing._get_boto3_session.cache_clear()
         data_processing._get_s3_client.cache_clear()
+        data_processing._get_s3_client_config.cache_clear()
 
+        mock_body = Mock(wraps=io.BytesIO(b"col\nvalue\n"))
         mock_client = Mock()
         mock_client.get_object.return_value = {
-            "Body": io.BytesIO(b"col\nvalue\n"),
+            "Body": mock_body,
         }
         mock_session = Mock()
         mock_session.client.return_value = mock_client
@@ -290,12 +292,17 @@ class TestProcessFit:
         assert df["col"].tolist() == ["value"]
         assert mock_boto3_session.call_count == 1
         assert mock_session.client.call_count == 1
+        _, client_kwargs = mock_session.client.call_args
+        assert client_kwargs["config"].connect_timeout == 5
+        assert client_kwargs["config"].read_timeout == 30
         mock_client.get_object.assert_called_once_with(
             Bucket="bucket", Key="fit_files/catalogue.csv"
         )
+        mock_body.close.assert_called_once()
 
         data_processing._get_boto3_session.cache_clear()
         data_processing._get_s3_client.cache_clear()
+        data_processing._get_s3_client_config.cache_clear()
 
 
 class TestPrepareDataForAnalysis:

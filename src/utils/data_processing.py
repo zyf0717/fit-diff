@@ -23,6 +23,7 @@ try:
     import tempfile
 
     import boto3
+    from botocore.config import Config
 
     load_dotenv(override=True)
 
@@ -45,7 +46,56 @@ def _get_boto3_session(aws_profile: str = None):
 @lru_cache(maxsize=None)
 def _get_s3_client(aws_profile: str = None):
     """Return a cached S3 client for the given AWS profile."""
-    return _get_boto3_session(aws_profile).client("s3")
+    return _get_boto3_session(aws_profile).client("s3", config=_get_s3_client_config())
+
+
+def _get_s3_timeout_seconds(
+    env_var: str,
+    default: int,
+) -> int:
+    """Read an S3 timeout from the environment, falling back to a safe default."""
+    raw_value = os.getenv(env_var)
+    if raw_value is None:
+        return default
+
+    try:
+        timeout_seconds = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid %s value %r; using default %s seconds",
+            env_var,
+            raw_value,
+            default,
+        )
+        return default
+
+    if timeout_seconds <= 0:
+        logger.warning(
+            "Non-positive %s value %r; using default %s seconds",
+            env_var,
+            raw_value,
+            default,
+        )
+        return default
+    return timeout_seconds
+
+
+@lru_cache(maxsize=1)
+def _get_s3_client_config():
+    """Build the shared S3 client config with explicit network timeouts."""
+    connect_timeout = _get_s3_timeout_seconds(
+        "AWS_S3_CONNECT_TIMEOUT_SECONDS",
+        5,
+    )
+    read_timeout = _get_s3_timeout_seconds(
+        "AWS_S3_READ_TIMEOUT_SECONDS",
+        30,
+    )
+    return Config(
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        retries={"max_attempts": 2, "mode": "standard"},
+    )
 
 
 def process_file(file_path: str, aws_profile: str = None) -> dict:
@@ -875,10 +925,21 @@ def read_catalogue():
             logger.warning("CATALOGUE_CSV_KEY not set")
             return pd.DataFrame()
 
-        # S3 read (same pattern as catalogue_update.py)
+        logger.info(
+            "Fetching cloud catalogue from s3://%s/%s using profile=%s",
+            bucket,
+            csv_key,
+            aws_profile or "default",
+        )
         s3_client = _get_s3_client(aws_profile)
         response = s3_client.get_object(Bucket=bucket, Key=csv_key)
-        df = pd.read_csv(response["Body"])
+        logger.info("S3 catalogue object retrieved; parsing CSV stream")
+        body = response["Body"]
+        try:
+            df = pd.read_csv(body)
+        finally:
+            body.close()
+        logger.info("Loaded %s catalogue rows from s3://%s/%s", len(df), bucket, csv_key)
         return df
 
     except Exception as e:

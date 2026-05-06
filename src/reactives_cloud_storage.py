@@ -37,6 +37,26 @@ from src.utils.cloud_manifest import (
 from src.utils.cloud_plots import RANGE_PLOT_SPECS, create_cloud_metric_range_plot
 
 
+def get_cloud_empty_state_message(request: dict | None) -> str | None:
+    """Return a user-facing empty-state message for the cloud metric cards."""
+    if request is None:
+        return None
+
+    pair_df = request.get("pair_df")
+    selected_pair_ids = request.get("selected_pair_ids") or []
+
+    if isinstance(pair_df, pd.DataFrame) and pair_df.empty:
+        return "No file pairs available for the current filters."
+
+    if not selected_pair_ids:
+        return (
+            "No file pairs selected.\n"
+            'Select one or more rows above and click "Refresh Sections Below".'
+        )
+
+    return None
+
+
 def create_cloud_storage_reactives(
     inputs: Inputs, session=None, local_pair_override=None
 ):
@@ -157,6 +177,11 @@ def create_cloud_storage_reactives(
             build_cloud_pair_selection_table(pair_df),
             selection_mode="rows",
         )
+
+    @reactive.Effect
+    @reactive.event(inputs.cloudSelectAllRows)
+    async def _select_all_cloud_rows():
+        await cloudPairSelectionTable.update_cell_selection("all")
 
     @reactive.Calc
     def _selected_cloud_pair_ids():
@@ -382,6 +407,7 @@ def create_cloud_storage_reactives(
                 benchmark_indicator=benchmark_indicator,
                 theme_settings=_safe_input("plotly_theme"),
                 selected_pair_id=selected_cloud_plot_pair_id.get(),
+                empty_message=get_cloud_empty_state_message(request),
             )
 
             figure_widget = go.FigureWidget(figure)

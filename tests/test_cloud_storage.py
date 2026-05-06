@@ -10,6 +10,7 @@ from src.reactives_cloud_storage import (
     compute_pair_summary,
     create_cloud_metric_range_plot,
     filter_cloud_pair_manifest,
+    get_cloud_empty_state_message,
     get_cloud_manifest_date_bounds,
     get_cloud_manifest_groups,
     get_selected_cloud_pair_ids,
@@ -400,6 +401,20 @@ def test_create_cloud_metric_range_plot_empty_state_uses_theme_and_height():
     assert figure.layout.yaxis.visible is False
 
 
+def test_create_cloud_metric_range_plot_empty_state_can_show_annotation_message():
+    figure = create_cloud_metric_range_plot(
+        pd.DataFrame(),
+        "Mean Bias",
+        empty_message="No file pairs selected.\nSelect rows above.",
+    )
+
+    assert isinstance(figure, go.Figure)
+    assert len(figure.layout.annotations) == 1
+    assert figure.layout.annotations[0].text == (
+        "No file pairs selected.<br>Select rows above."
+    )
+
+
 def test_create_cloud_metric_range_plot_handles_missing_status_column():
     figure = create_cloud_metric_range_plot(
         pd.DataFrame({"Mean Bias": [1.0]}),
@@ -557,6 +572,34 @@ def test_create_cloud_metric_range_plot_pads_axis_when_benchmark_hits_edge():
 
     axis_trace = figure.data[0]
     assert axis_trace.x[1] > 10.0
+
+
+def test_get_cloud_empty_state_message_is_none_before_refresh():
+    assert get_cloud_empty_state_message(None) is None
+
+
+def test_get_cloud_empty_state_message_for_empty_selection_after_refresh():
+    request = {
+        "pair_df": pd.DataFrame([{"pair_id": "p1"}]),
+        "selected_pair_ids": [],
+    }
+
+    assert get_cloud_empty_state_message(request) == (
+        "No file pairs selected.\n"
+        'Select one or more rows above and click "Refresh Sections Below".'
+    )
+
+
+def test_get_cloud_empty_state_message_for_empty_filtered_manifest():
+    request = {
+        "pair_df": pd.DataFrame(),
+        "selected_pair_ids": [],
+    }
+
+    assert (
+        get_cloud_empty_state_message(request)
+        == "No file pairs available for the current filters."
+    )
 
 
 def test_align_pair_data_uses_existing_local_alignment_path():

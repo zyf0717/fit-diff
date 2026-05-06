@@ -65,6 +65,7 @@ def create_cloud_metric_range_plot(
     benchmark_indicator: float | None = None,
     theme_settings=None,
     selected_pair_id: str | None = None,
+    empty_message: str | None = None,
 ):
     """Create one horizontal range-strip plot for a single cloud summary metric."""
 
@@ -76,6 +77,19 @@ def create_cloud_metric_range_plot(
         )
         fig.update_xaxes(visible=False, fixedrange=True)
         fig.update_yaxes(visible=False, fixedrange=True)
+        if empty_message:
+            fig.add_annotation(
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                text=str(empty_message).replace("\n", "<br>"),
+                showarrow=False,
+                xanchor="center",
+                yanchor="middle",
+                align="center",
+                font={"size": 12},
+            )
         return apply_plotly_theme(fig, theme_settings)
 
     if not isinstance(results_df, pd.DataFrame) or results_df.empty:
