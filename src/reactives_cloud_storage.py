@@ -34,7 +34,11 @@ from src.utils.cloud_manifest import (
     get_cloud_manifest_groups,
     get_selected_cloud_pair_ids,
 )
-from src.utils.cloud_plots import RANGE_PLOT_SPECS, create_cloud_metric_range_plot
+from src.utils.cloud_plots import (
+    RANGE_PLOT_SPECS,
+    create_cloud_metric_range_plot,
+    summarize_cloud_metric_range_stats,
+)
 
 
 def get_cloud_empty_state_message(request: dict | None) -> str | None:
@@ -79,6 +83,60 @@ def create_cloud_storage_reactives(
             return input_obj()
         except SilentException:
             return default
+
+    def _format_metric_stat(value):
+        if value is None:
+            return "n/a"
+        numeric_value = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        if pd.isna(numeric_value):
+            return str(value)
+        absolute_value = abs(float(numeric_value))
+        if absolute_value >= 100:
+            return f"{numeric_value:.1f}"
+        if absolute_value >= 10:
+            return f"{numeric_value:.2f}"
+        return f"{numeric_value:.3f}"
+
+    def _render_metric_stats_panel(summary: dict | None):
+        if not summary:
+            return ui.div(
+                ui.div("No data", class_="cloud-range-metric-empty"),
+                class_="cloud-range-metric-stats",
+            )
+
+        rows = [
+            ("N", str(summary["count"]), ""),
+            ("Mean", _format_metric_stat(summary["mean"]), ""),
+            ("Median", _format_metric_stat(summary["median"]), ""),
+            ("SD", _format_metric_stat(summary["sd"]), ""),
+        ]
+        if "benchmark_value" in summary:
+            rows.append(
+                (
+                    summary.get("benchmark_label", "Threshold"),
+                    (
+                        f"{summary['benchmark_exceed_count']}/"
+                        f"{summary['count']} ({summary['benchmark_exceed_pct']:.0f}%)"
+                    ),
+                    "cloud-range-metric-stat-alert",
+                )
+            )
+
+        return ui.div(
+            *[
+                ui.div(
+                    ui.span(label, class_="cloud-range-metric-stat-label"),
+                    ui.span(value, class_="cloud-range-metric-stat-value"),
+                    class_=(
+                        "cloud-range-metric-stat"
+                        if not extra_class
+                        else f"cloud-range-metric-stat {extra_class}"
+                    ),
+                )
+                for label, value, extra_class in rows
+            ],
+            class_="cloud-range-metric-stats",
+        )
 
     @reactive.Calc
     def _cloud_manifest():
@@ -384,10 +442,18 @@ def create_cloud_storage_reactives(
             cards.append(
                 ui.card(
                     ui.card_header(spec["card_title"]),
-                    output_widget(
-                        spec["output_id"],
-                        height="150px",
-                        fill=True,
+                    ui.layout_columns(
+                        ui.div(
+                            output_widget(
+                                spec["output_id"],
+                                height="170px",
+                                fill=True,
+                            ),
+                            class_="cloud-range-metric-plot",
+                        ),
+                        ui.output_ui(spec["stats_output_id"]),
+                        col_widths=[9, 3],
+                        class_="cloud-range-metric-body",
                     ),
                 )
             )
@@ -397,6 +463,7 @@ def create_cloud_storage_reactives(
         output_id: str,
         metric_name: str,
         benchmark_indicator: float | None = None,
+        benchmark_direction: str | None = None,
     ):
         def _plot():
             results_df = _cloud_pair_results()
@@ -405,6 +472,7 @@ def create_cloud_storage_reactives(
                 results_df,
                 metric_name,
                 benchmark_indicator=benchmark_indicator,
+                benchmark_direction=benchmark_direction,
                 theme_settings=_safe_input("plotly_theme"),
                 selected_pair_id=selected_cloud_plot_pair_id.get(),
                 empty_message=get_cloud_empty_state_message(request),
@@ -460,11 +528,39 @@ def create_cloud_storage_reactives(
         _plot.__name__ = output_id
         return render_widget(_plot)
 
+    def _make_cloud_metric_stats_renderer(
+        output_id: str,
+        metric_name: str,
+        benchmark_indicator: float | None = None,
+        benchmark_direction: str | None = None,
+    ):
+        def _stats():
+            summary = summarize_cloud_metric_range_stats(
+                _cloud_pair_results(),
+                metric_name,
+                benchmark_indicator=benchmark_indicator,
+                benchmark_direction=benchmark_direction,
+            )
+            return _render_metric_stats_panel(summary)
+
+        _stats.__name__ = output_id
+        return render.ui(_stats)
+
     cloud_metric_plot_renderers = {
         spec["output_id"]: _make_cloud_metric_plot_renderer(
             spec["output_id"],
             spec["metric_name"],
             benchmark_indicator=spec["benchmark_indicator"],
+            benchmark_direction=spec["benchmark_direction"],
+        )
+        for spec in RANGE_PLOT_SPECS
+    }
+    cloud_metric_stats_renderers = {
+        spec["stats_output_id"]: _make_cloud_metric_stats_renderer(
+            spec["stats_output_id"],
+            spec["metric_name"],
+            benchmark_indicator=spec["benchmark_indicator"],
+            benchmark_direction=spec["benchmark_direction"],
         )
         for spec in RANGE_PLOT_SPECS
     }
@@ -484,5 +580,6 @@ def create_cloud_storage_reactives(
         "cloudAutoShiftSelector": cloudAutoShiftSelector,
         "cloudMetricRangePlotGrid": cloudMetricRangePlotGrid,
         **cloud_metric_plot_renderers,
+        **cloud_metric_stats_renderers,
         "cloudPairSummaryTable": cloudPairSummaryTable,
     }

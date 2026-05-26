@@ -25,6 +25,60 @@ app_ui = ui.page_fluid(
             justify-content: center;
             width: 100%;
         }
+
+        .cloud-range-metric-body {
+            align-items: stretch;
+            row-gap: 0.75rem;
+        }
+
+        .cloud-range-metric-plot {
+            min-height: 170px;
+        }
+
+        .cloud-range-metric-stats {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.45rem;
+            height: 100%;
+            min-height: 170px;
+            padding-left: 0.75rem;
+            border-left: 1px solid var(--bs-border-color);
+        }
+
+        .cloud-range-metric-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.75rem;
+            font-size: 0.9rem;
+            line-height: 1.2;
+        }
+
+        .cloud-range-metric-stat-label,
+        .cloud-range-metric-empty {
+            color: var(--bs-secondary-color);
+        }
+
+        .cloud-range-metric-stat-value {
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .cloud-range-metric-stat-alert .cloud-range-metric-stat-value {
+            color: #d62728;
+        }
+
+        @media (max-width: 991.98px) {
+            .cloud-range-metric-stats {
+                min-height: auto;
+                padding-left: 0;
+                padding-top: 0.75rem;
+                border-left: none;
+                border-top: 1px solid var(--bs-border-color);
+            }
+        }
         """),
     ui.tags.script("""
         Shiny.addCustomMessageHandler("toggle_disabled", function(msg) {
