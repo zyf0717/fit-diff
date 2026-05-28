@@ -36,10 +36,14 @@ conda activate fit-diff
 For AI-powered analysis features, create a `.env` file in the project root:
 
 ```env
+AI_KNOW_API_KEY=your_ai_know_api_key
+AI_KNOW_API_URL=https://ai-know.nus.edu.sg/backend/completions/oai
 API_KEY_ID=your_api_key_id
 API_KEY_SECRET=your_api_key_secret
 LLM_API_URL=your_llm_api_url
 ```
+
+`AI_KNOW_API_URL` + `AI_KNOW_API_KEY` are now the default LLM path. The legacy `LLM_API_URL` + Cloudflare access headers remain supported as fallback.
 
 ### Manual Installation
 

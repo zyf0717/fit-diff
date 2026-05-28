@@ -11,9 +11,44 @@ import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-API_KEY_ID = os.getenv("API_KEY_ID", "")
-API_KEY_SECRET = os.getenv("API_KEY_SECRET", "")
-LLM_API_URL = os.getenv("LLM_API_URL", "")
+
+
+def _normalize_ai_know_api_url(ai_know_api_url: str) -> str:
+    normalized = ai_know_api_url.strip().rstrip("/")
+    if normalized.endswith("/chat/completions") or normalized.endswith(
+        "/v1/chat/completions"
+    ):
+        return normalized
+    return f"{normalized}/chat/completions"
+
+
+def _resolve_llm_request_config() -> tuple[str, dict[str, str], str | None]:
+    ai_know_api_url = os.getenv("AI_KNOW_API_URL", "").strip()
+    ai_know_api_key = os.getenv("AI_KNOW_API_KEY", "").strip()
+    if ai_know_api_url and ai_know_api_key:
+        ai_know_model = os.getenv("AI_KNOW_MODEL", "gpt-5.4").strip()
+        return (
+            _normalize_ai_know_api_url(ai_know_api_url),
+            {
+                "Ocp-Apim-Subscription-Key": ai_know_api_key,
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            ai_know_model or "gpt-5.4",
+        )
+
+    llm_api_url = os.getenv("LLM_API_URL", "").strip()
+    headers = {"Content-Type": "application/json"}
+
+    api_key_id = os.getenv("API_KEY_ID", "").strip()
+    if api_key_id:
+        headers["CF-Access-Client-Id"] = api_key_id
+
+    api_key_secret = os.getenv("API_KEY_SECRET", "").strip()
+    if api_key_secret:
+        headers["CF-Access-Client-Secret"] = api_key_secret
+
+    return llm_api_url, headers, None
 
 
 def _stats_payload(
@@ -87,16 +122,18 @@ async def generate_llm_summary_stream(
         # "temperature": 0.2,
         "stream": True,
     }
-    headers = {
-        "CF-Access-Client-Id": API_KEY_ID,
-        "CF-Access-Client-Secret": API_KEY_SECRET,
-        "Content-Type": "application/json",
-    }
+    llm_api_url, headers, model = _resolve_llm_request_config()
+    if not llm_api_url:
+        yield "LLM endpoint is not configured."
+        return
+    if model:
+        payload["model"] = model
+
     timeout = httpx.Timeout(connect=10, read=None, write=10, pool=10)
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream(
-            "POST", LLM_API_URL, headers=headers, json=payload
+            "POST", llm_api_url, headers=headers, json=payload
         ) as r:
             r.raise_for_status()
             async for line in r.aiter_lines():
