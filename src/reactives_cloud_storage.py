@@ -75,21 +75,17 @@ def _interpolate_hex_color(
 
 
 def get_cloud_metric_stat_alert_color(benchmark_exceed_pct: float | None) -> str:
-    """Map threshold exceedance percentage to a continuous alert color."""
+    """Map threshold exceedance percentage to a green-yellow-red gradient."""
     if benchmark_exceed_pct is None:
         return "#d62728"
 
     clamped_pct = max(0.0, min(100.0, float(benchmark_exceed_pct)))
-    green = (25, 135, 84)
-    yellow = (224, 168, 0)
-    orange = (253, 126, 20)
-    red = (214, 39, 40)
-
-    if clamped_pct <= 25:
-        return _interpolate_hex_color(green, yellow, clamped_pct / 25.0)
+    green = (40, 167, 69)
+    yellow = (255, 193, 7)
+    red = (220, 53, 69)
     if clamped_pct <= 50:
-        return _interpolate_hex_color( yellow, orange, (clamped_pct - 25.0) / 25.0)
-    return _interpolate_hex_color(orange, red, (clamped_pct - 50.0) / 50.0)
+        return _interpolate_hex_color(green, yellow, clamped_pct / 50.0)
+    return _interpolate_hex_color(yellow, red, (clamped_pct - 50.0) / 50.0)
 
 
 def get_cloud_metric_stat_alert_style(benchmark_exceed_pct: float | None) -> str:

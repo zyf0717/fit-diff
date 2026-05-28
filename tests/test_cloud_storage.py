@@ -604,25 +604,25 @@ def test_get_cloud_empty_state_message_for_empty_filtered_manifest():
 
 
 def test_get_cloud_metric_stat_alert_color_is_green_at_zero_pct():
-    assert get_cloud_metric_stat_alert_color(0.0) == "#198754"
+    assert get_cloud_metric_stat_alert_color(0.0) == "#28a745"
 
 
-def test_get_cloud_metric_stat_alert_color_is_yellow_at_25_pct():
-    assert get_cloud_metric_stat_alert_color(25.0) == "#e0a800"
+def test_get_cloud_metric_stat_alert_color_moves_toward_yellow_at_25_pct():
+    assert get_cloud_metric_stat_alert_color(25.0) == "#94b426"
 
 
-def test_get_cloud_metric_stat_alert_color_is_orange_at_50_pct():
-    assert get_cloud_metric_stat_alert_color(50.0) == "#fd7e14"
+def test_get_cloud_metric_stat_alert_color_is_yellow_at_50_pct():
+    assert get_cloud_metric_stat_alert_color(50.0) == "#ffc107"
 
 
 def test_get_cloud_metric_stat_alert_color_is_red_at_100_pct():
-    assert get_cloud_metric_stat_alert_color(100.0) == "#d62728"
+    assert get_cloud_metric_stat_alert_color(100.0) == "#dc3545"
 
 
 def test_get_cloud_metric_stat_alert_color_interpolates_between_anchors():
-    assert get_cloud_metric_stat_alert_color(12.5) == "#7c982a"
-    assert get_cloud_metric_stat_alert_color(37.5) == "#ee930a"
-    assert get_cloud_metric_stat_alert_color(75.0) == "#ea521e"
+    assert get_cloud_metric_stat_alert_color(12.5) == "#5eae36"
+    assert get_cloud_metric_stat_alert_color(37.5) == "#c9ba16"
+    assert get_cloud_metric_stat_alert_color(75.0) == "#ee7b26"
 
 
 def test_align_pair_data_uses_existing_local_alignment_path():
