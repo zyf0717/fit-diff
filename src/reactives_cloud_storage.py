@@ -61,6 +61,19 @@ def get_cloud_empty_state_message(request: dict | None) -> str | None:
     return None
 
 
+def get_cloud_metric_stat_alert_class(benchmark_exceed_pct: float | None) -> str:
+    """Map threshold exceedance percentage to a severity class."""
+    if benchmark_exceed_pct is None:
+        return "cloud-range-metric-stat-alert-high"
+    if benchmark_exceed_pct == 0:
+        return "cloud-range-metric-stat-alert-zero"
+    if benchmark_exceed_pct < 25:
+        return "cloud-range-metric-stat-alert-low"
+    if benchmark_exceed_pct < 50:
+        return "cloud-range-metric-stat-alert-medium"
+    return "cloud-range-metric-stat-alert-high"
+
+
 def create_cloud_storage_reactives(
     inputs: Inputs, session=None, local_pair_override=None
 ):
@@ -118,7 +131,9 @@ def create_cloud_storage_reactives(
                         f"{summary['benchmark_exceed_count']}/"
                         f"{summary['count']} ({summary['benchmark_exceed_pct']:.0f}%)"
                     ),
-                    "cloud-range-metric-stat-alert",
+                    get_cloud_metric_stat_alert_class(
+                        summary.get("benchmark_exceed_pct")
+                    ),
                 )
             )
 

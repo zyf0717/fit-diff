@@ -13,6 +13,7 @@ from src.reactives_cloud_storage import (
     get_cloud_empty_state_message,
     get_cloud_manifest_date_bounds,
     get_cloud_manifest_groups,
+    get_cloud_metric_stat_alert_class,
     get_selected_cloud_pair_ids,
     load_cached_common_metrics,
 )
@@ -599,6 +600,42 @@ def test_get_cloud_empty_state_message_for_empty_filtered_manifest():
     assert (
         get_cloud_empty_state_message(request)
         == "No file pairs available for the current filters."
+    )
+
+
+def test_get_cloud_metric_stat_alert_class_is_green_at_zero_pct():
+    assert (
+        get_cloud_metric_stat_alert_class(0.0)
+        == "cloud-range-metric-stat-alert-zero"
+    )
+
+
+def test_get_cloud_metric_stat_alert_class_is_yellow_below_25_pct():
+    assert (
+        get_cloud_metric_stat_alert_class(24.99)
+        == "cloud-range-metric-stat-alert-low"
+    )
+
+
+def test_get_cloud_metric_stat_alert_class_is_orange_below_50_pct():
+    assert (
+        get_cloud_metric_stat_alert_class(25.0)
+        == "cloud-range-metric-stat-alert-medium"
+    )
+    assert (
+        get_cloud_metric_stat_alert_class(49.99)
+        == "cloud-range-metric-stat-alert-medium"
+    )
+
+
+def test_get_cloud_metric_stat_alert_class_is_red_at_50_pct_or_higher():
+    assert (
+        get_cloud_metric_stat_alert_class(50.0)
+        == "cloud-range-metric-stat-alert-high"
+    )
+    assert (
+        get_cloud_metric_stat_alert_class(100.0)
+        == "cloud-range-metric-stat-alert-high"
     )
 
 
