@@ -66,22 +66,6 @@ app_ui = ui.page_fluid(
             font-weight: 600;
         }
 
-        .cloud-range-metric-stat-alert-zero .cloud-range-metric-stat-value {
-            color: var(--bs-success, #198754);
-        }
-
-        .cloud-range-metric-stat-alert-low .cloud-range-metric-stat-value {
-            color: var(--bs-warning, #e0a800);
-        }
-
-        .cloud-range-metric-stat-alert-medium .cloud-range-metric-stat-value {
-            color: #fd7e14;
-        }
-
-        .cloud-range-metric-stat-alert-high .cloud-range-metric-stat-value {
-            color: #d62728;
-        }
-
         @media (max-width: 991.98px) {
             .cloud-range-metric-stats {
                 min-height: auto;

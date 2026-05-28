@@ -61,17 +61,40 @@ def get_cloud_empty_state_message(request: dict | None) -> str | None:
     return None
 
 
-def get_cloud_metric_stat_alert_class(benchmark_exceed_pct: float | None) -> str:
-    """Map threshold exceedance percentage to a severity class."""
+def _interpolate_hex_color(
+    start_color: tuple[int, int, int],
+    end_color: tuple[int, int, int],
+    ratio: float,
+) -> str:
+    clamped_ratio = max(0.0, min(1.0, float(ratio)))
+    channels = [
+        round(start_channel + (end_channel - start_channel) * clamped_ratio)
+        for start_channel, end_channel in zip(start_color, end_color)
+    ]
+    return "#{:02x}{:02x}{:02x}".format(*channels)
+
+
+def get_cloud_metric_stat_alert_color(benchmark_exceed_pct: float | None) -> str:
+    """Map threshold exceedance percentage to a continuous alert color."""
     if benchmark_exceed_pct is None:
-        return "cloud-range-metric-stat-alert-high"
-    if benchmark_exceed_pct == 0:
-        return "cloud-range-metric-stat-alert-zero"
-    if benchmark_exceed_pct < 25:
-        return "cloud-range-metric-stat-alert-low"
-    if benchmark_exceed_pct < 50:
-        return "cloud-range-metric-stat-alert-medium"
-    return "cloud-range-metric-stat-alert-high"
+        return "#d62728"
+
+    clamped_pct = max(0.0, min(100.0, float(benchmark_exceed_pct)))
+    green = (25, 135, 84)
+    yellow = (224, 168, 0)
+    orange = (253, 126, 20)
+    red = (214, 39, 40)
+
+    if clamped_pct <= 25:
+        return _interpolate_hex_color(green, yellow, clamped_pct / 25.0)
+    if clamped_pct <= 50:
+        return _interpolate_hex_color( yellow, orange, (clamped_pct - 25.0) / 25.0)
+    return _interpolate_hex_color(orange, red, (clamped_pct - 50.0) / 50.0)
+
+
+def get_cloud_metric_stat_alert_style(benchmark_exceed_pct: float | None) -> str:
+    """Return an inline style for the benchmark alert value."""
+    return f"color: {get_cloud_metric_stat_alert_color(benchmark_exceed_pct)};"
 
 
 def create_cloud_storage_reactives(
@@ -118,10 +141,10 @@ def create_cloud_storage_reactives(
             )
 
         rows = [
-            ("N", str(summary["count"]), ""),
-            ("Mean", _format_metric_stat(summary["mean"]), ""),
-            ("Median", _format_metric_stat(summary["median"]), ""),
-            ("SD", _format_metric_stat(summary["sd"]), ""),
+            ("N", str(summary["count"]), None),
+            ("Mean", _format_metric_stat(summary["mean"]), None),
+            ("Median", _format_metric_stat(summary["median"]), None),
+            ("SD", _format_metric_stat(summary["sd"]), None),
         ]
         if "benchmark_value" in summary:
             rows.append(
@@ -131,7 +154,7 @@ def create_cloud_storage_reactives(
                         f"{summary['benchmark_exceed_count']}/"
                         f"{summary['count']} ({summary['benchmark_exceed_pct']:.0f}%)"
                     ),
-                    get_cloud_metric_stat_alert_class(
+                    get_cloud_metric_stat_alert_style(
                         summary.get("benchmark_exceed_pct")
                     ),
                 )
@@ -141,14 +164,14 @@ def create_cloud_storage_reactives(
             *[
                 ui.div(
                     ui.span(label, class_="cloud-range-metric-stat-label"),
-                    ui.span(value, class_="cloud-range-metric-stat-value"),
-                    class_=(
-                        "cloud-range-metric-stat"
-                        if not extra_class
-                        else f"cloud-range-metric-stat {extra_class}"
+                    ui.span(
+                        value,
+                        class_="cloud-range-metric-stat-value",
+                        style=style,
                     ),
+                    class_="cloud-range-metric-stat",
                 )
-                for label, value, extra_class in rows
+                for label, value, style in rows
             ],
             class_="cloud-range-metric-stats",
         )
