@@ -1,5 +1,7 @@
 """Cloud Storage reactive functions for manifest-driven S3 pair analysis."""
 
+import asyncio
+import logging
 import os
 
 import pandas as pd
@@ -9,6 +11,7 @@ from shiny.types import SilentException
 from shinywidgets import output_widget, render_widget
 
 from src.utils import (
+    generate_cloud_llm_summary_stream,
     get_cached_cloud_pair_summary,
     get_cloud_cache_db_path,
     init_cloud_cache,
@@ -16,10 +19,7 @@ from src.utils import (
     read_catalogue,
 )
 from src.utils.cloud_analysis import (
-    align_pair_data,
     build_cloud_pair_result_row,
-    build_cloud_pair_results,
-    compute_pair_summary,
     load_cached_common_metrics,
     load_cloud_pair_data,
 )
@@ -39,6 +39,8 @@ from src.utils.cloud_plots import (
     create_cloud_metric_range_plot,
     summarize_cloud_metric_range_stats,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_cloud_empty_state_message(request: dict | None) -> str | None:
@@ -599,6 +601,106 @@ def create_cloud_storage_reactives(
         for spec in RANGE_PLOT_SPECS
     }
 
+    _cloud_llm_streaming = reactive.Value(False)
+    _cloud_llm_loading = reactive.Value("")
+    cloudStreamMd = ui.MarkdownStream("cloudStreamOutput")
+
+    async def _empty_stream(msg: str):
+        yield msg
+
+    @render.ui
+    def cloudLlmLoadingText():
+        text = _cloud_llm_loading()
+        if not text:
+            return None
+        return ui.p(text, class_="text-muted fst-italic")
+
+    @reactive.effect
+    @reactive.event(inputs.cloudLlmSummaryRegen)
+    async def _cloud_llm_summary_effect():
+        stop = asyncio.Event()
+
+        async def _dot_loop():
+            try:
+                while not stop.is_set():
+                    await asyncio.sleep(2.0)
+                    if not stop.is_set():
+                        cur = _cloud_llm_loading()
+                        _cloud_llm_loading.set(cur + ". ")
+            except asyncio.CancelledError:
+                pass
+
+        async def _with_loading(stream):
+            first = True
+            async for chunk in stream:
+                if first:
+                    stop.set()
+                    if not dot_task.done():
+                        dot_task.cancel()
+                    _cloud_llm_loading.set("")
+                    first = False
+                yield chunk
+
+        dot_task = asyncio.create_task(_dot_loop())
+
+        try:
+            _cloud_llm_streaming.set(True)
+            request = _cloud_analysis_request()
+            results_df = _cloud_pair_results()
+
+            if request is None:
+                await cloudStreamMd.stream(
+                    _empty_stream("No analysis request configured.")
+                )
+                return
+
+            metric = request.get("metric", "")
+
+            ok_rows = (
+                results_df[results_df.get("Status", "") == "OK"]
+                if not results_df.empty
+                else results_df
+            )
+            if ok_rows is None or ok_rows.empty:
+                await cloudStreamMd.stream(
+                    _empty_stream("No valid pair results to analyze.")
+                )
+                return
+
+            _cloud_llm_loading.set("Processing and thinking ")
+
+            await cloudStreamMd.stream(
+                _with_loading(
+                    generate_cloud_llm_summary_stream(
+                        metric=metric,
+                        results_df=results_df,
+                    )
+                )
+            )
+        except Exception as e:
+            logger.error("Error generating cloud LLM summary: %s", e, exc_info=True)
+            await cloudStreamMd.stream(_empty_stream(f"Error: {e}"))
+        finally:
+            stop.set()
+            if not dot_task.done():
+                dot_task.cancel()
+                try:
+                    await dot_task
+                except (asyncio.CancelledError, StopAsyncIteration):
+                    pass
+            _cloud_llm_loading.set("")
+            _cloud_llm_streaming.set(False)
+
+    @reactive.Effect
+    async def _toggle_cloud_llm_button():
+        results_df = _cloud_pair_results()
+        streaming = _cloud_llm_streaming()
+        disabled = results_df.empty or streaming
+        await session.send_custom_message(
+            "toggle_disabled",
+            {"id": "cloudLlmSummaryRegen", "disabled": disabled},
+        )
+
     return {
         "_cloud_manifest": _cloud_manifest,
         "_filtered_cloud_manifest": _filtered_cloud_manifest,
@@ -616,4 +718,8 @@ def create_cloud_storage_reactives(
         **cloud_metric_plot_renderers,
         **cloud_metric_stats_renderers,
         "cloudPairSummaryTable": cloudPairSummaryTable,
+        "cloudLlmLoadingText": cloudLlmLoadingText,
+        "_cloud_llm_streaming": _cloud_llm_streaming,
+        "_cloud_llm_summary_effect": _cloud_llm_summary_effect,
+        "_toggle_cloud_llm_button": _toggle_cloud_llm_button,
     }

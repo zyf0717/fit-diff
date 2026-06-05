@@ -22,7 +22,7 @@ def test_cloud_pair_summary_cache_round_trip(tmp_path: Path):
         "Ref File": "ref.fit",
         "Metric": "heart_rate",
         "Auto-shift": "Minimize MAE",
-        "Status": "OK",
+        "Status": "No errors",
         "Applied Shift (s)": 1.0,
         "Mean Bias": 0.5,
         "MAE": 1.0,
@@ -61,7 +61,7 @@ def test_cloud_pair_summary_cache_misses_when_etag_changes(tmp_path: Path):
         ref_etag="ref-etag",
         metric="heart_rate",
         auto_shift_method="Minimize MAE",
-        result_row={"Status": "OK", "Mean Bias": 0.5},
+        result_row={"Status": "No errors", "Mean Bias": 0.5},
         db_path=db_path,
     )
 
@@ -84,7 +84,7 @@ def test_clear_cloud_cache_removes_cached_rows(tmp_path: Path):
         ref_etag="ref-etag",
         metric="heart_rate",
         auto_shift_method="Minimize MAE",
-        result_row={"Status": "OK", "Mean Bias": 0.5},
+        result_row={"Status": "No errors", "Mean Bias": 0.5},
         db_path=db_path,
     )
 

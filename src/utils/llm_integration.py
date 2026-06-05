@@ -151,3 +151,84 @@ async def generate_llm_summary_stream(
                 except Exception:
                     # Ignore any non-JSON keepalives or partial lines
                     continue
+
+
+async def generate_cloud_llm_summary_stream(
+    metric: str,
+    results_df: pd.DataFrame,
+) -> AsyncGenerator[str, None]:
+    """Stream a multi-pair LLM summary for cloud batch analysis results."""
+    ok_rows = (
+        results_df[results_df.get("Status", "") == "OK"]
+        if not results_df.empty
+        else results_df
+    )
+    if ok_rows is None or ok_rows.empty:
+        yield "No valid pair results to analyze."
+        return
+
+    records = ok_rows.drop(columns=["pair_id"], errors="ignore").to_dict(
+        orient="records"
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a precise data analyst. Reason logically and explain to non-technical readers in plain language.\n"
+                "OUTPUT RULES:\n"
+                "- Return ONLY a valid Markdown snippet.\n"
+                "- Around 300 words, no preamble, no code fences, no quotes.\n"
+                "- Preserve all numbers EXACTLY as given (no rounding, no unit changes, no re-computation).\n"
+                "- Use bullet points for key statistics and numeric ranges.\n"
+                "- Focus on cross-pair patterns: which pairs stand out, trends by group or date, outliers, overall data quality.\n"
+                "- Caveat clearly if anything is an inference.\n"
+                "- Explain what the metrics mean in simple terms.\n"
+                "- Always end with a **Verdict:** …"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Analyze the following cloud batch results across {len(records)} file pairs "
+                f"for the metric '{metric}'. Each record represents one test-vs-reference pair "
+                "with bias, accuracy, and agreement statistics.\n\n"
+                "Focus on cross-pair patterns: which pairs are performing well vs poorly, "
+                "are there trends by Group or Date, any outliers, and what's the overall data quality.\n\n"
+                f"Payload (JSON):\n{json.dumps(records, ensure_ascii=False)}"
+            ),
+        },
+    ]
+
+    payload = {
+        "messages": messages,
+        "stream": True,
+    }
+    llm_api_url, headers, model = _resolve_llm_request_config()
+    if not llm_api_url:
+        yield "LLM endpoint is not configured."
+        return
+    if model:
+        payload["model"] = model
+
+    timeout = httpx.Timeout(connect=10, read=None, write=10, pool=10)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream(
+            "POST", llm_api_url, headers=headers, json=payload
+        ) as r:
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                data = line[6:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                    delta = obj.get("choices", [{}])[0].get("delta", {})
+                    chunk = delta.get("content")
+                    if chunk:
+                        yield chunk
+                except Exception:
+                    continue

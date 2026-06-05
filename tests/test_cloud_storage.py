@@ -347,7 +347,7 @@ def test_build_cloud_pair_results_returns_summary_rows():
 
     result_df = build_cloud_pair_results(pair_data, "heart_rate", "Minimize MAE")
 
-    assert result_df.iloc[0]["Status"] == "OK"
+    assert result_df.iloc[0]["Status"] == "No errors"
     assert result_df.iloc[0]["Group"] == "pilot"
     assert result_df.iloc[0]["Metric"] == "heart_rate"
     assert result_df.iloc[0]["Mean Bias"] == 1.0
@@ -362,7 +362,7 @@ def test_create_cloud_metric_range_plot_returns_plotly_figure():
                 "Date": "2025-08-01",
                 "Test File": "test.fit",
                 "Ref File": "ref.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 1.0,
                 "MAE": 1.0,
                 "MSE": 1.0,
@@ -435,7 +435,7 @@ def test_create_cloud_metric_range_plot_applies_dark_theme_colors():
                 "Date": "2025-08-01",
                 "Test File": "test.fit",
                 "Ref File": "ref.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 1.0,
             }
         ]
@@ -467,7 +467,7 @@ def test_create_cloud_metric_range_plot_highlights_selected_pair():
                 "Date": "2025-08-01",
                 "Test File": "test-a.fit",
                 "Ref File": "ref-a.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 1.0,
             },
             {
@@ -476,7 +476,7 @@ def test_create_cloud_metric_range_plot_highlights_selected_pair():
                 "Date": "2025-08-02",
                 "Test File": "test-b.fit",
                 "Ref File": "ref-b.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 2.0,
             },
         ]
@@ -502,7 +502,7 @@ def test_create_cloud_metric_range_plot_adds_benchmark_line_when_configured():
                 "Date": "2025-08-01",
                 "Test File": "test.fit",
                 "Ref File": "ref.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 1.0,
             }
         ]
@@ -536,7 +536,7 @@ def test_create_cloud_metric_range_plot_omits_benchmark_line_when_unconfigured()
                 "Date": "2025-08-01",
                 "Test File": "test.fit",
                 "Ref File": "ref.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "MSE": 1.0,
             }
         ]
@@ -559,7 +559,7 @@ def test_create_cloud_metric_range_plot_pads_axis_when_benchmark_hits_edge():
                 "Date": "2025-08-01",
                 "Test File": "test.fit",
                 "Ref File": "ref.fit",
-                "Status": "OK",
+                "Status": "No errors",
                 "Mean Bias": 1.0,
             }
         ]

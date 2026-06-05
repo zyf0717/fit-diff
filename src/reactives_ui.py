@@ -105,16 +105,14 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                     ui.card_header(
                         ui.tooltip(
                             ui.span("Bias ", icon_svg("circle-question")),
-                            ui.HTML(
-                                """
+                            ui.HTML("""
         <p><strong>Bias</strong>: Systematic difference between test and reference.</p>
         <hr>
         <p><b>Paired t-test p-value:</b> Chance the mean difference is zero (parametric).</p>
         <p><b>Wilcoxon signed-rank p-value:</b> Chance the median difference is zero (non-parametric, uses ranks).</p>
         <p><b>Sign test p-value:</b> Chance positives and negatives are equally likely (ignores magnitude).</p>
         <p><b>Cohen's d:</b> Standardized mean difference relative to variability.</p>
-    """
-                            ),
+    """),
                             placement="right",
                             id="bias_tooltip",
                         )
@@ -128,8 +126,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                                 "Accuracy & Precision ",
                                 icon_svg("circle-question"),
                             ),
-                            ui.HTML(
-                                """
+                            ui.HTML("""
         <p><b>Accuracy</b>: How close measurements are to the true or reference value.</p>
         <p><b>Precision</b>: How consistent repeated measurements are with each other.</p>
         <hr>
@@ -138,8 +135,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         <p><b>Mean Squared Error (MSE)</b>: Average of squared errors; combines both bias and variability.</p>
         <p><b>Mean Absolute Percentage Error (MAPE)</b>: Average size of the errors expressed as a percentage of the reference values.</p>
         <p><b>Standard Deviation of Errors</b>: How spread out the errors are around their mean; reflects random variability.</p>
-    """
-                            ),
+    """),
                             placement="right",
                             id="accuracy_tooltip",
                         )
@@ -153,8 +149,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                                 "Agreement & Reliability ",
                                 icon_svg("circle-question"),
                             ),
-                            ui.HTML(
-                                """
+                            ui.HTML("""
         <p><b>Agreement</b>: How closely two measurement methods produce the same values.</p>
         <p><b>Reliability</b>: How consistently a method produces the same result under similar conditions.</p>
         <hr>
@@ -162,8 +157,7 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
         <p><b>Pearson Correlation Coefficient</b>: Captures how strongly test and reference move together linearly, without requiring their values to match in magnitude.</p>
         <p><b>Pearson Correlation p-value</b>: Probability of seeing the observed correlation if the true correlation were zero.</p>
         <p><b>Limits of Agreement (LoA)</b>: Range where most differences between test and reference measurements fall, shown as mean bias ± 1.96 × SD of errors.</p>
-    """
-                            ),
+    """),
                             placement="right",
                             id="agreement_tooltip",
                         )
@@ -176,7 +170,10 @@ def create_ui_reactives(inputs: Inputs, file_reactives: dict, data_reactives: di
                 ui.card_header("LLM Generated Explanation"),
                 ui.layout_columns(
                     ui.input_action_button("llm_summary_regen", "Ask BotBot!"),
-                    ui.output_markdown_stream("streamOutput", auto_scroll=False),
+                    ui.div(
+                        ui.output_ui("llmLoadingText"),
+                        ui.output_markdown_stream("streamOutput", auto_scroll=False),
+                    ),
                     col_widths=[3, 9],
                 ),
             ),

@@ -1,5 +1,6 @@
 """Statistics and table reactive functions for the FIT file comparison app."""
 
+import asyncio
 import logging
 
 import pandas as pd
@@ -79,21 +80,71 @@ def create_statistics_reactives(
 
     md = ui.MarkdownStream("streamOutput")
 
+    _llm_loading = reactive.Value("")
+
+    @render.ui
+    def llmLoadingText():
+        text = _llm_loading()
+        if not text:
+            return None
+        return ui.p(text, class_="text-muted fst-italic")
+
+    async def _single_chunk(msg: str):
+        yield msg
+
     @reactive.effect
     @reactive.event(inputs.llm_summary_regen)
     async def llm_summary_effect():
+        stop = asyncio.Event()
+
+        async def _dot_loop():
+            try:
+                while not stop.is_set():
+                    await asyncio.sleep(2.0)
+                    if not stop.is_set():
+                        cur = _llm_loading()
+                        _llm_loading.set(cur + ". ")
+            except asyncio.CancelledError:
+                pass
+
+        async def _with_loading(stream):
+            first = True
+            async for chunk in stream:
+                if first:
+                    stop.set()
+                    if not dot_task.done():
+                        dot_task.cancel()
+                    _llm_loading.set("")
+                    first = False
+                yield chunk
+
+        dot_task = asyncio.create_task(_dot_loop())
+
         try:
             metric = data_reactives["_get_comparison_metric"]()
+            _llm_loading.set("Processing and thinking ")
             await md.stream(
-                generate_llm_summary_stream(
-                    metric=metric,
-                    bias_stats=_get_bias_stats(),
-                    accuracy_stats=_get_accuracy_stats(),
-                    agreement_stats=_get_agreement_stats(),
+                _with_loading(
+                    generate_llm_summary_stream(
+                        metric=metric,
+                        bias_stats=_get_bias_stats(),
+                        accuracy_stats=_get_accuracy_stats(),
+                        agreement_stats=_get_agreement_stats(),
+                    )
                 )
             )
         except Exception as e:
             logger.error("Error generating LLM summary: %s", e, exc_info=True)
+            await md.stream(_single_chunk(f"Error: {e}"))
+        finally:
+            stop.set()
+            if not dot_task.done():
+                dot_task.cancel()
+                try:
+                    await dot_task
+                except (asyncio.CancelledError, StopAsyncIteration):
+                    pass
+            _llm_loading.set("")
 
     @render.data_frame
     def fileInfoTable():
@@ -155,6 +206,7 @@ def create_statistics_reactives(
         "biasTable": biasTable,
         "accuracyTable": accuracyTable,
         "agreementTable": agreementTable,
+        "llmLoadingText": llmLoadingText,
         "llm_summary_effect": llm_summary_effect,
         "fileInfoTable": fileInfoTable,
         "rawDataTable": rawDataTable,

@@ -30,7 +30,10 @@ from .data_processing import (
 )
 
 # LLM integration functions
-from .llm_integration import generate_llm_summary_stream
+from .llm_integration import (
+    generate_cloud_llm_summary_stream,
+    generate_llm_summary_stream,
+)
 
 # Statistical analysis functions
 from .statistics import (
@@ -84,5 +87,6 @@ __all__ = [
     "create_rolling_error_plot",
     "get_plotly_theme",
     # LLM integration
+    "generate_cloud_llm_summary_stream",
     "generate_llm_summary_stream",
 ]

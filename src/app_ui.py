@@ -267,6 +267,20 @@ app_ui = ui.page_fluid(
                 ui.output_ui("cloudMetricRangePlotGrid"),
                 ui.hr(),
                 ui.card(
+                    ui.card_header("LLM Generated Summary"),
+                    ui.layout_columns(
+                        ui.input_action_button("cloudLlmSummaryRegen", "Ask BotBot!"),
+                        ui.div(
+                            ui.output_ui("cloudLlmLoadingText"),
+                            ui.output_markdown_stream(
+                                "cloudStreamOutput", auto_scroll=False
+                            ),
+                        ),
+                        col_widths=[3, 9],
+                    ),
+                ),
+                ui.hr(),
+                ui.card(
                     ui.card_header("Per-Pair Summary"),
                     ui.output_data_frame("cloudPairSummaryTable"),
                 ),
