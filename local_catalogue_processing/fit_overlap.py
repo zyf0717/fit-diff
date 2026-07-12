@@ -52,7 +52,7 @@ def compare_fit_files_by_timestamp(file_path_a, file_path_b):
     return _candidate_to_overlap_metrics(candidate)
 
 
-def build_folder_fit_overlap_metrics(file_paths):
+def build_folder_fit_overlap_metrics(file_paths, role_by_path=None):
     """
     Build overlap metrics for FIT files in the same folder.
 
@@ -65,10 +65,17 @@ def build_folder_fit_overlap_metrics(file_paths):
             continue
         fit_data = _build_fit_overlap_data(str(file_path))
         if fit_data is not None:
+            if role_by_path is not None:
+                fit_data["pairing_role"] = role_by_path[str(file_path)]
             fit_items.append(fit_data)
 
     overlap_by_path = {}
-    for pairing in build_group_pairings(fit_items, group_key="folder", id_key="path"):
+    for pairing in build_group_pairings(
+        fit_items,
+        group_key="folder",
+        id_key="path",
+        role_key="pairing_role" if role_by_path is not None else None,
+    ):
         metrics = _candidate_to_overlap_metrics(pairing)
         path_a = pairing["item_a_id"]
         path_b = pairing["item_b_id"]

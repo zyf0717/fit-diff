@@ -120,10 +120,10 @@ def list_local_files(directory):
 
 def build_file_dataframe(files, base_dir):
     """
-    Build a dataframe with filename, relative_path, and tags.
+    Build a dataframe with validated 1:1 pairing metadata for every discovered file.
     """
+    files = [str(path) for path in files]
     date_pattern = re.compile(r"\d{8}")
-    overlap_by_path = build_folder_fit_overlap_metrics(files)
     columns = [
         "date",
         "filename",
@@ -132,18 +132,33 @@ def build_file_dataframe(files, base_dir):
         "overlap_duration",
         "overlap_datapoints",
         "tags",
+        "pairing_error",
     ]
+    rows_by_path = {
+        str(path): _build_file_row(path, base_dir, date_pattern) for path in files
+    }
+    role_by_path = {
+        path: "pacer" if _has_tag(row, "pacer") else "counterpart"
+        for path, row in rows_by_path.items()
+    }
+    overlap_by_path = build_folder_fit_overlap_metrics(
+        files, role_by_path=role_by_path
+    )
+    pairing_by_path, pairing_errors = _build_pairing(rows_by_path, overlap_by_path)
+
+    for path, row in rows_by_path.items():
+        pairing = pairing_by_path.get(path, {})
+        paired_file_path = pairing.get("paired_file_path")
+        row["paired_file_path"] = (
+            os.path.relpath(paired_file_path, base_dir) if paired_file_path else None
+        )
+        row["overlap_duration"] = pairing.get("overlap_duration")
+        row["overlap_datapoints"] = pairing.get("overlap_datapoints")
+        row["pairing_error"] = pairing_errors.get(path)
+
     df = (
         pd.DataFrame(
-            [
-                _build_file_row(
-                    path,
-                    base_dir,
-                    date_pattern,
-                    overlap_by_path.get(str(path)),
-                )
-                for path in files
-            ],
+            rows_by_path.values(),
             columns=columns,
         )
         .sort_values("relative_path")
@@ -152,6 +167,54 @@ def build_file_dataframe(files, base_dir):
     df["overlap_datapoints"] = pd.array(df["overlap_datapoints"], dtype="Int64")
 
     return df
+
+
+def _build_pairing(rows_by_path, overlap_by_path):
+    pairing_by_path = dict(overlap_by_path)
+    pairing_errors = {}
+    unpaired_groups = {}
+
+    for path, row in rows_by_path.items():
+        folder = os.path.dirname(path)
+        date_value = row["date"]
+        if date_value is None:
+            pairing_errors[path] = _format_pairing_error(
+                folder, None, [(path, row)]
+            )
+            continue
+        if path in pairing_by_path:
+            continue
+        unpaired_groups.setdefault((folder, date_value), []).append((path, row))
+
+    for (folder, date_value), entries in sorted(unpaired_groups.items()):
+        pacer_count = sum(_has_tag(row, "pacer") for _, row in entries)
+        if len(entries) != 2 or pacer_count != 1:
+            error = _format_pairing_error(folder, date_value, entries)
+            for path, _ in entries:
+                pairing_errors[path] = error
+            continue
+        (path_a, _), (path_b, _) = sorted(entries, key=lambda entry: entry[0])
+        pairing_by_path[path_a] = {"paired_file_path": path_b}
+        pairing_by_path[path_b] = {"paired_file_path": path_a}
+
+    return pairing_by_path, pairing_errors
+
+
+def _format_pairing_error(folder, date_value, entries):
+    files = ", ".join(
+        f"{os.path.basename(path)} [tags={row['tags'] or '-'}]"
+        for path, row in sorted(entries, key=lambda entry: entry[0])
+    )
+    pacer_count = sum(_has_tag(row, "pacer") for _, row in entries)
+    return (
+        f"folder={folder!r}, date={(date_value or '<unresolved>')!r}: "
+        f"expected exactly 2 files with exactly 1 pacer; "
+        f"found files={len(entries)}, pacers={pacer_count}: {files}"
+    )
+
+
+def _has_tag(row, tag):
+    return tag in (row.get("tags") or "").split("|")
 
 
 def _extract_iso_date(filename, date_pattern):
@@ -314,6 +377,20 @@ def _match_map_tags(values, tag_map):
     return matched
 
 
+def _match_filename_tags(filename_stem, tag_map):
+    matched = []
+    seen = set()
+    for key, value in tag_map.items():
+        key_str = str(key).lower()
+        pattern = rf"(?<![a-z0-9]){re.escape(key_str)}(?![a-z0-9])"
+        if re.search(pattern, filename_stem):
+            mapped = str(value).lower()
+            if mapped not in seen:
+                matched.append(mapped)
+                seen.add(mapped)
+    return matched
+
+
 def build_level_tags(file_path, base_dir):
     if base_dir:
         rel_path = os.path.relpath(file_path, base_dir)
@@ -452,11 +529,11 @@ def _extract_participant_id(file_path, base_dir):
 #     return None, None
 
 
-def _build_file_row(path, base_dir, date_pattern, overlap_metrics=None):
+def _build_file_row(path, base_dir, date_pattern):
     filename = os.path.basename(path)
     level_tags = build_level_tags(path, base_dir)
     filename_value = os.path.splitext(os.path.basename(str(path)))[0].lower()
-    filename_tags = _match_map_tags([filename_value], FILENAME_TAG_KEYWORDS_MAP)
+    filename_tags = _match_filename_tags(filename_value, FILENAME_TAG_KEYWORDS_MAP)
     tags = _merge_tag_lists(level_tags, filename_tags)
     participant_id = _extract_participant_id(path, base_dir)
     if participant_id and participant_id not in tags:
@@ -470,18 +547,11 @@ def _build_file_row(path, base_dir, date_pattern, overlap_metrics=None):
         "filename": filename,
         "relative_path": os.path.relpath(path, base_dir),
         "date": date_value,
-        "paired_file_path": (
-            os.path.relpath(overlap_metrics.get("paired_file_path"), base_dir)
-            if overlap_metrics and overlap_metrics.get("paired_file_path")
-            else None
-        ),
+        "paired_file_path": None,
         "tags": "|".join(tags) if tags else None,
-        "overlap_duration": (
-            overlap_metrics.get("overlap_duration") if overlap_metrics else None
-        ),
-        "overlap_datapoints": (
-            overlap_metrics.get("overlap_datapoints") if overlap_metrics else None
-        ),
+        "overlap_duration": None,
+        "overlap_datapoints": None,
+        "pairing_error": None,
     }
     return row
 

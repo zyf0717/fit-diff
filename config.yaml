@@ -31,3 +31,6 @@ filename_tag_keywords_map:
   pacer: pacer
   eqlifemonitor: eq02
   eq02: eq02
+  fam: fam
+  rm: rm
+  run: run
