@@ -1,0 +1,13 @@
+[Unit]
+Description=FIT File Analysis Tool
+
+[Service]
+Type=simple
+WorkingDirectory=%h/repos/fit-diff
+ExecStart=%h/repos/fit-diff/.venv/bin/python %h/repos/fit-diff/fit_diff.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

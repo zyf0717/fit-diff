@@ -12,24 +12,26 @@ Note: This project is in active development. Features and interfaces may change 
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.12 or higher
-- Conda (recommended) or pip
-
-### Using Conda (Recommended)
-
-1. Create the environment:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run
+these commands from the repository root:
 
 ```bash
-conda env create -f environment.yml
+uv python install
+uv sync --locked
 ```
 
-1. Activate the environment:
+uv installs the Python version pinned in `.python-version` and creates a local
+`.venv` with the dependencies in `uv.lock`. `pyproject.toml` is the dependency
+manifest; commit it and the lockfile together when changing dependencies. No
+environment activation is needed when using `uv run`.
 
-```bash
-conda activate fit-diff
-```
+`uv sync --locked` includes test and notebook tools from the `dev` group. For a
+server-only environment, use `uv sync --locked --no-dev`. In an editor, select
+the `.venv` interpreter for Python files and notebooks.
+
+Pandas stays on version 2 because CSV timestamp conversion currently assumes
+nanosecond datetime storage. Keep this constraint until that conversion and the
+catalogue's missing-value handling support pandas 3.
 
 ### Optional: LLM Integration Setup
 
@@ -45,16 +47,6 @@ LLM_API_URL=your_llm_api_url
 
 `AI_KNOW_API_URL` + `AI_KNOW_API_KEY` are now the default LLM path. The legacy `LLM_API_URL` + Cloudflare access headers remain supported as fallback.
 
-### Manual Installation
-
-Alternatively, install dependencies with pip:
-
-```bash
-pip install shiny==1.4.0 shinyswatch==0.9.0 fitparse garmin-fit-sdk==21.171.0
-pip install numpy pandas plotly pytest python-dotenv python-duckdb scipy
-pip install aiohttp requests faicons==0.2.2 shinywidgets==0.6.2
-```
-
 ## Usage
 
 ### Web Application
@@ -62,10 +54,50 @@ pip install aiohttp requests faicons==0.2.2 shinywidgets==0.6.2
 Run the main Shiny application:
 
 ```bash
-python fit_diff.py
+uv run --locked fit_diff.py
 ```
 
 Then open your browser to [http://localhost:8001](http://localhost:8001).
+
+#### Running with systemd (Linux)
+
+The user service runs the application in the foreground, restarts it on failure,
+and sends logs to the journal. It expects the repository at `~/repos/fit-diff`
+and uses its `.venv` directly; adjust the paths in `systemd/fit-diff.service` if
+your installation differs. Run the installation commands above before starting
+the service. The application loads the repository's `.env` file as usual.
+
+Install the service and enable lingering so it starts at boot and keeps running
+without a login session:
+
+```bash
+mkdir -p ~/.config/systemd/user
+install -m 644 systemd/fit-diff.service ~/.config/systemd/user/fit-diff.service
+systemctl --user daemon-reload
+loginctl enable-linger "$USER"
+```
+
+When migrating from cron, back up `crontab -l`, remove only the FIT Diff
+`@reboot .../fit-diff/cron.sh` entry with `crontab -e`, and stop the existing
+`python fit_diff.py` process before starting the service to free port 8001.
+
+```bash
+systemctl --user enable --now fit-diff.service
+systemctl --user status fit-diff.service
+journalctl --user -u fit-diff.service -f
+```
+
+To deploy an update, stop the service before syncing its environment:
+
+```bash
+systemctl --user stop fit-diff.service
+uv sync --locked --no-dev
+systemctl --user start fit-diff.service
+```
+
+If you change the unit file, reinstall it and run `systemctl --user daemon-reload`
+before restarting. To stop the service and disable startup at boot, use
+`systemctl --user disable --now fit-diff.service`.
 
 #### Using the Interface
 
@@ -79,7 +111,7 @@ Then open your browser to [http://localhost:8001](http://localhost:8001).
 Compare performance between Garmin FIT SDK and fitparse:
 
 ```bash
-python benchmark_fit_parsers.py
+uv run --locked benchmark_fit_parsers.py
 ```
 
 This tool helps determine which parser works best for your specific FIT files and use cases.
@@ -89,15 +121,15 @@ This tool helps determine which parser works best for your specific FIT files an
 Execute the full test suite:
 
 ```bash
-pytest tests/
+uv run --locked pytest tests/
 ```
 
 Run specific test modules:
 
 ```bash
-pytest tests/test_data_processing.py
-pytest tests/test_statistics.py
-pytest tests/test_visualizations.py
+uv run --locked pytest tests/test_data_processing.py
+uv run --locked pytest tests/test_statistics.py
+uv run --locked pytest tests/test_visualizations.py
 ```
 
 ## Project Structure
@@ -119,7 +151,9 @@ fit-diff/
 ├── sandbox/                     # Development experiments and notebooks
 ├── fit_diff.py                  # Main application entry point
 ├── benchmark_fit_parsers.py     # Parser performance comparison tool
-└── environment.yml              # Conda environment specification
+├── pyproject.toml               # Runtime and development dependencies
+├── uv.lock                      # Locked dependency versions
+└── .python-version              # Python version used by uv
 ```
 
 ### Adding New Features

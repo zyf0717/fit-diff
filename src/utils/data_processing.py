@@ -38,7 +38,7 @@ def _get_boto3_session(aws_profile: str = None):
     """Return a cached boto3 session for the given AWS profile."""
     if not S3_AVAILABLE:
         raise ImportError(
-            "boto3 is required for S3 support. Install with: pip install boto3"
+            "boto3 is required for S3 support. Run: uv sync --locked"
         )
     return boto3.Session(profile_name=aws_profile) if aws_profile else boto3.Session()
 
@@ -277,7 +277,7 @@ def _read_s3_fit_file(s3_url: str, aws_profile: str = None) -> dict:
     """Read and decode a FIT file from S3, returning raw messages."""
     if not S3_AVAILABLE:
         raise ImportError(
-            "boto3 is required for S3 support. Install with: pip install boto3"
+            "boto3 is required for S3 support. Run: uv sync --locked"
         )
 
     # Parse S3 URL
@@ -330,7 +330,7 @@ def _process_s3_file(s3_url: str, aws_profile: str = None) -> dict:
     """
     if not S3_AVAILABLE:
         raise ImportError(
-            "boto3 is required for S3 support. Install with: pip install boto3"
+            "boto3 is required for S3 support. Run: uv sync --locked"
         )
 
     # Parse S3 URL to get key and determine file type
